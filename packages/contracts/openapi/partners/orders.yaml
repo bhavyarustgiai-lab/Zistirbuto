@@ -1,0 +1,486 @@
+paths:
+  /partners/firms/{firmId}/orders:
+    get:
+      summary: List partner orders
+      parameters:
+        - $ref: "#/components/parameters/FirmId"
+      responses:
+        "200":
+          description: Partner orders
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerOrdersListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      summary: Create partner order
+      parameters:
+        - $ref: "#/components/parameters/FirmId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerOrdersCreateRequest"
+      responses:
+        "200":
+          description: Created order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerOrdersOrder"
+        "400":
+          $ref: "#/components/responses/FieldError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /partners/firms/{firmId}/orders/{orderId}:
+    get:
+      summary: Get partner order detail
+      parameters:
+        - $ref: "#/components/parameters/FirmId"
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: Partner order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerOrdersOrder"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      summary: Update partner order
+      parameters:
+        - $ref: "#/components/parameters/FirmId"
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerOrdersUpdateRequest"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerOrdersOrder"
+        "400":
+          $ref: "#/components/responses/FieldError"
+  /partners/firms/{firmId}/orders/{orderId}/status:
+    post:
+      summary: Update partner order status
+      parameters:
+        - $ref: "#/components/parameters/FirmId"
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerOrdersStatusRequest"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerOrdersOrder"
+        "400":
+          $ref: "#/components/responses/FieldError"
+  /partners/firms/{firmId}/orders/{orderId}/returns:
+    get:
+      summary: List returns for a partner order
+      parameters:
+        - $ref: "#/components/parameters/FirmId"
+        - $ref: "#/components/parameters/OrderId"
+      responses:
+        "200":
+          description: Order returns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerOrderReturnsListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      summary: Create a sales return and credit note for a partner order
+      parameters:
+        - $ref: "#/components/parameters/FirmId"
+        - $ref: "#/components/parameters/OrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PartnerOrderReturnCreateRequest"
+      responses:
+        "201":
+          description: Created return with credit note and updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerOrderReturnCreateResponse"
+        "400":
+          $ref: "#/components/responses/FieldError"
+  /partners/firms/{firmId}/orders/{orderId}/returns/{returnId}/void:
+    post:
+      summary: Void a sales return and cancel its credit note
+      parameters:
+        - $ref: "#/components/parameters/FirmId"
+        - $ref: "#/components/parameters/OrderId"
+        - $ref: "#/components/parameters/ReturnId"
+      responses:
+        "200":
+          description: Voided return with cancelled credit note and updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PartnerOrderReturnCreateResponse"
+        "400":
+          $ref: "#/components/responses/FieldError"
+
+components:
+  parameters:
+    FirmId:
+      in: path
+      name: firmId
+      required: true
+      schema:
+        type: string
+    OrderId:
+      in: path
+      name: orderId
+      required: true
+      schema:
+        type: string
+    ReturnId:
+      in: path
+      name: returnId
+      required: true
+      schema:
+        type: string
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PartnerOrdersErrorResponse"
+    Forbidden:
+      description: Firm access denied
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PartnerOrdersErrorResponse"
+    NotFound:
+      description: Order not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PartnerOrdersErrorResponse"
+    FieldError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PartnerOrdersErrorResponse"
+  schemas:
+    PartnerOrdersFieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+    PartnerOrdersErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        fieldErrors:
+          type: array
+          items:
+            $ref: "#/components/schemas/PartnerOrdersFieldError"
+    PartnerOrderStatus:
+      type: string
+      enum: [DRAFT, PLACED, CONFIRMED, PACKED, DISPATCHED, DELIVERED, PARTIALLY_DELIVERED, CANCELLED, RETURNED, PARTIALLY_RETURNED]
+    PartnerOrdersLineRequest:
+      type: object
+      required: [itemId, quantity]
+      properties:
+        itemId:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+    PartnerOrdersCreateRequest:
+      type: object
+      required: [clientBusinessId, clientOutletId, items]
+      properties:
+        clientBusinessId:
+          type: string
+        clientOutletId:
+          type: string
+        orderDate:
+          type: string
+          format: date
+        notes:
+          type: string
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/PartnerOrdersLineRequest"
+    PartnerOrdersUpdateRequest:
+      type: object
+      required: [clientBusinessId, clientOutletId, items]
+      properties:
+        clientBusinessId:
+          type: string
+        clientOutletId:
+          type: string
+        notes:
+          type: string
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/PartnerOrdersLineRequest"
+    PartnerOrdersStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/PartnerOrderStatus"
+        note:
+          type: string
+        items:
+          type: array
+          description: Optional per-item quantities for partial delivery or return transitions.
+          items:
+            $ref: "#/components/schemas/PartnerOrdersLineRequest"
+    PartnerOrderReturnLineRequest:
+      type: object
+      required: [orderItemId, quantity]
+      properties:
+        orderItemId:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+    PartnerOrderReturnCreateRequest:
+      type: object
+      required: [returnDate, note, lines]
+      properties:
+        returnDate:
+          type: string
+          format: date
+        note:
+          type: string
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/PartnerOrderReturnLineRequest"
+    PartnerOrdersItem:
+      type: object
+      required: [id, orderId, itemId, itemCode, itemName, quantity, mrp, discountPercentage]
+      properties:
+        id:
+          type: string
+        orderId:
+          type: string
+        itemId:
+          type: string
+        itemCode:
+          type: string
+        itemName:
+          type: string
+        unit:
+          type: string
+        quantity:
+          type: integer
+        dispatchedQuantity:
+          type: integer
+          minimum: 0
+        deliveredQuantity:
+          type: integer
+          minimum: 0
+        returnedQuantity:
+          type: integer
+          minimum: 0
+        cancelledQuantity:
+          type: integer
+          minimum: 0
+        mrp:
+          type: number
+        discountPercentage:
+          type: number
+    PartnerOrdersOrder:
+      type: object
+      required:
+        [id, firmId, orderNumber, clientBusinessId, clientBusinessName, clientOutletId, clientOutletName, orderDate, status, itemCount, totalQuantity, items]
+      properties:
+        id:
+          type: string
+        firmId:
+          type: string
+        orderNumber:
+          type: string
+        clientBusinessId:
+          type: string
+        clientBusinessName:
+          type: string
+        clientOutletId:
+          type: string
+        clientOutletName:
+          type: string
+        orderDate:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/PartnerOrderStatus"
+        createdAt:
+          type: string
+        createdByName:
+          type: string
+        confirmedAt:
+          type: string
+        dispatchedAt:
+          type: string
+        deliveredAt:
+          type: string
+        cancelledAt:
+          type: string
+        linkedInvoiceId:
+          type: string
+        linkedInvoiceNumber:
+          type: string
+        itemCount:
+          type: integer
+        totalQuantity:
+          type: integer
+        notes:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PartnerOrdersItem"
+    PartnerSalesReturnLine:
+      type: object
+      required: [id, salesReturnId, orderItemId, itemId, itemName, returnedQuantity, acceptedQuantity, creditAmount]
+      properties:
+        id:
+          type: string
+        salesReturnId:
+          type: string
+        orderItemId:
+          type: string
+        invoiceLineId:
+          type: string
+        itemId:
+          type: string
+        itemName:
+          type: string
+        returnedQuantity:
+          type: integer
+        acceptedQuantity:
+          type: integer
+        creditAmount:
+          type: number
+        reason:
+          type: string
+    PartnerSalesReturn:
+      type: object
+      required: [id, firmId, returnNumber, orderId, invoiceId, clientBusinessId, clientOutletId, returnDate, status, totalQuantity, totalCreditAmount, lines]
+      properties:
+        id:
+          type: string
+        firmId:
+          type: string
+        returnNumber:
+          type: string
+        orderId:
+          type: string
+        orderNumber:
+          type: string
+        invoiceId:
+          type: string
+        invoiceNumber:
+          type: string
+        creditNoteId:
+          type: string
+        creditNoteNumber:
+          type: string
+        clientBusinessId:
+          type: string
+        clientBusinessName:
+          type: string
+        clientOutletId:
+          type: string
+        clientOutletName:
+          type: string
+        returnDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [ISSUED, CANCELLED]
+        notes:
+          type: string
+        totalQuantity:
+          type: integer
+        totalCreditAmount:
+          type: number
+        createdAt:
+          type: string
+        createdByName:
+          type: string
+        cancelledAt:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/PartnerSalesReturnLine"
+    PartnerCreditNoteSummary:
+      type: object
+      required: [id, creditNoteNumber, status, totalAmount]
+      properties:
+        id:
+          type: string
+        creditNoteNumber:
+          type: string
+        status:
+          type: string
+          enum: [DRAFT, ISSUED, CANCELLED]
+        totalAmount:
+          type: number
+    PartnerOrderReturnCreateResponse:
+      type: object
+      required: [salesReturn, creditNote, order]
+      properties:
+        salesReturn:
+          $ref: "#/components/schemas/PartnerSalesReturn"
+        creditNote:
+          $ref: "#/components/schemas/PartnerCreditNoteSummary"
+        order:
+          $ref: "#/components/schemas/PartnerOrdersOrder"
+    PartnerOrderReturnsListResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/PartnerSalesReturn"
+    PartnerOrdersListResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/PartnerOrdersOrder"

@@ -1,0 +1,13 @@
+node_modules
+.pnpm-store
+.DS_Store
+.env
+.env.*
+!.env.example
+dist
+build
+coverage
+.cache/
+apps/frontend/.rspack-cache
+apps/frontend/dist
+apps/backend/tmp

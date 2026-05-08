@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    container_name: zistributo-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: zistributo
+    ports:
+      - "5433:5432"
+    volumes:
+      - zistributo_pg:/var/lib/postgresql/data
+
+volumes:
+  zistributo_pg:

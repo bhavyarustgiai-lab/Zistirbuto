@@ -1,0 +1,7 @@
+{
+  "name": "@zistributo/ui-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "tailwind.preset.js"
+}

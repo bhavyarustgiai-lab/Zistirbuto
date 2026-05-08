@@ -1,0 +1,12 @@
+{
+  "name": "zistributo",
+  "private": true,
+  "packageManager": "pnpm@9.12.3",
+  "scripts": {
+    "dev": "./scripts/dev.sh",
+    "dev:web": "pnpm --filter @zistributo/frontend dev",
+    "dev:api": "cd apps/backend && set -a && source .env && set +a && env GOCACHE=../../.cache/go-build go run ./cmd/server",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck"
+  }
+}

@@ -1,0 +1,66 @@
+openapi: 3.0.3
+info:
+  title: Zistributo API
+  version: 1.0.0
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+  /auth/send-otp:
+    post:
+      summary: Send login OTP
+      responses:
+        "200":
+          description: OTP sent
+  /auth/verify-otp:
+    post:
+      summary: Verify OTP and create session
+      responses:
+        "200":
+          description: Authenticated
+  /auth/logout:
+    post:
+      summary: Logout current session
+      responses:
+        "204":
+          description: Logged out
+  /me:
+    get:
+      summary: Current user
+      responses:
+        "200":
+          description: User profile
+  /staff:
+    get:
+      summary: List staff
+      responses:
+        "200":
+          description: Staff list
+    post:
+      summary: Create staff
+      responses:
+        "201":
+          description: Created
+  /services:
+    get:
+      summary: List services
+      responses:
+        "200":
+          description: Service list
+  /day-entries:
+    get:
+      summary: Get day entries by date
+      parameters:
+        - in: query
+          name: date
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Day entries
