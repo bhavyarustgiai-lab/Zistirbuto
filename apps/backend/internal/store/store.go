@@ -7735,25 +7735,37 @@ func (s *Store) CreatePartnerPurchase(firmID string, input CreatePartnerPurchase
 		if line.Quantity <= 0 || line.CostPrice < 0 {
 			return PartnerPurchase{}, fmt.Errorf("quantity must be positive and costPrice cannot be negative")
 		}
-		var itemID, itemCode, itemName, sku string
+		var catalogItemID, itemCode, itemName, sku string
 		err := tx.QueryRow(ctx, `
-			select i.item_id, c.sku, c.name, c.sku
-			from partner_firm_inventory_items i
-			join partner_product_catalog c on c.id = i.catalog_item_id
-			where i.firm_id = $1::bigint and i.item_id = $2
-		`, firmID, strings.TrimSpace(line.ItemID)).Scan(&itemID, &itemCode, &itemName, &sku)
+			select c.id, c.sku, c.name, c.sku
+			from partner_product_catalog c
+			join partner_firm_brands fb on fb.brand_id = c.brand_id
+			where fb.firm_id = $1::bigint and c.id = $2 and c.status = 'ACTIVE'
+		`, firmID, strings.TrimSpace(line.ItemID)).Scan(&catalogItemID, &itemCode, &itemName, &sku)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return PartnerPurchase{}, fmt.Errorf("inventory item not found")
+				err = tx.QueryRow(ctx, `
+					select c.id, c.sku, c.name, c.sku
+					from partner_firm_inventory_items i
+					join partner_product_catalog c on c.id = i.catalog_item_id
+					where i.firm_id = $1::bigint and i.item_id = $2 and c.status = 'ACTIVE'
+				`, firmID, strings.TrimSpace(line.ItemID)).Scan(&catalogItemID, &itemCode, &itemName, &sku)
+				if errors.Is(err, pgx.ErrNoRows) {
+					return PartnerPurchase{}, fmt.Errorf("catalog item not found")
+				}
+				if err != nil {
+					return PartnerPurchase{}, err
+				}
+			} else {
+				return PartnerPurchase{}, err
 			}
-			return PartnerPurchase{}, err
 		}
 		lineTotal := float64(line.Quantity) * line.CostPrice * (1 - line.DiscountPercentage/100) * (1 + line.TaxPercentage/100)
 		if _, err := tx.Exec(ctx, `
 			insert into partner_purchase_items (
 				id, firm_id, purchase_id, item_id, item_code, item_name, sku, quantity, cost_price, discount_percentage, tax_percentage, line_total
 			) values ($1, $2, $3, $4, $5, $6, nullif($7, ''), $8, $9, $10, $11, $12)
-		`, nextID("ppit"), firmID, purchaseID, itemID, itemCode, itemName, sku, line.Quantity, line.CostPrice, line.DiscountPercentage, line.TaxPercentage, lineTotal); err != nil {
+		`, nextID("ppit"), firmID, purchaseID, catalogItemID, itemCode, itemName, sku, line.Quantity, line.CostPrice, line.DiscountPercentage, line.TaxPercentage, lineTotal); err != nil {
 			return PartnerPurchase{}, err
 		}
 	}
@@ -7858,11 +7870,56 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 		if accountedQuantity > remaining {
 			return PartnerPurchase{}, fmt.Errorf("received quantity exceeds remaining quantity for %s", line.ItemName)
 		}
+		inventoryItemID := ""
+		if err := tx.QueryRow(ctx, `
+			select item_id
+			from partner_firm_inventory_items
+			where firm_id = $1::bigint and item_id = $2
+		`, firmID, line.ItemID).Scan(&inventoryItemID); err != nil {
+			if !errors.Is(err, pgx.ErrNoRows) {
+				return PartnerPurchase{}, err
+			}
+		}
+		if inventoryItemID == "" {
+			var defaultMRP int
+			var defaultDiscount float64
+			if err := tx.QueryRow(ctx, `
+				select c.default_mrp, c.default_discount_percentage::float8
+				from partner_product_catalog c
+				join partner_firm_brands fb on fb.brand_id = c.brand_id
+				where fb.firm_id = $1::bigint and c.id = $2 and c.status = 'ACTIVE'
+			`, firmID, line.ItemID).Scan(&defaultMRP, &defaultDiscount); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return PartnerPurchase{}, fmt.Errorf("catalog item not found for %s", line.ItemName)
+				}
+				return PartnerPurchase{}, err
+			}
+			if err := tx.QueryRow(ctx, `
+				select item_id
+				from partner_firm_inventory_items
+				where firm_id = $1::bigint and catalog_item_id = $2 and mrp = $3 and discount_percentage = $4
+				limit 1
+			`, firmID, line.ItemID, defaultMRP, defaultDiscount).Scan(&inventoryItemID); err != nil {
+				if !errors.Is(err, pgx.ErrNoRows) {
+					return PartnerPurchase{}, err
+				}
+			}
+			if inventoryItemID == "" {
+				inventoryItemID = nextID("pfi")
+				if _, err := tx.Exec(ctx, `
+					insert into partner_firm_inventory_items (
+						item_id, firm_id, catalog_item_id, mrp, discount_percentage, status, quantity
+					) values ($1, $2, $3, $4, $5, 'ACTIVE', 0)
+				`, inventoryItemID, firmID, line.ItemID, defaultMRP, defaultDiscount); err != nil {
+					return PartnerPurchase{}, err
+				}
+			}
+		}
 		if _, err := tx.Exec(ctx, `
 			insert into partner_goods_receipt_items (
 				id, firm_id, grn_id, purchase_item_id, item_id, ordered_quantity, received_quantity, damaged_quantity, notes
 			) values ($1, $2, $3, $4, $5, $6, $7, $8, nullif($9, ''))
-		`, nextID("pgri"), firmID, grnID, line.ID, line.ItemID, line.Quantity, receiptLine.ReceivedQuantity, receiptLine.DamagedQuantity, strings.TrimSpace(receiptLine.Notes)); err != nil {
+		`, nextID("pgri"), firmID, grnID, line.ID, inventoryItemID, line.Quantity, receiptLine.ReceivedQuantity, receiptLine.DamagedQuantity, strings.TrimSpace(receiptLine.Notes)); err != nil {
 			return PartnerPurchase{}, err
 		}
 		if _, err := tx.Exec(ctx, `
@@ -7882,7 +7939,7 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 			set quantity = quantity + $3,
 			    updated_at = now()
 			where firm_id = $1::bigint and item_id = $2
-		`, firmID, line.ItemID, receiptLine.ReceivedQuantity); err != nil {
+		`, firmID, inventoryItemID, receiptLine.ReceivedQuantity); err != nil {
 			return PartnerPurchase{}, err
 		}
 		note := fmt.Sprintf("GRN %s for purchase %s", grnNumber, purchase.PurchaseNumber)
@@ -7893,14 +7950,14 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 			insert into partner_stock_entries (
 				id, firm_id, item_id, quantity_delta, reason_type, reference_type, reference_id, note, created_by, unit_cost, created_at
 			) values ($1, $2, $3, $4, 'PURCHASE', 'PURCHASE', $5, $6, $7, $8, now())
-		`, nextID("pstock"), firmID, line.ItemID, receiptLine.ReceivedQuantity, grnID, note, s.currentUserID, line.CostPrice); err != nil {
+		`, nextID("pstock"), firmID, inventoryItemID, receiptLine.ReceivedQuantity, grnID, note, s.currentUserID, line.CostPrice); err != nil {
 			return PartnerPurchase{}, err
 		}
 		if _, err := tx.Exec(ctx, `
 			insert into partner_inventory_receipts (
 				id, firm_id, item_id, supplier_id, quantity, received_at, note, created_by
 			) values ($1, $2, $3, $4, $5, $6::date, nullif($7, ''), $8)
-		`, nextID("prec"), firmID, line.ItemID, purchase.SupplierID, receiptLine.ReceivedQuantity, receivedDate, note, s.currentUserID); err != nil {
+		`, nextID("prec"), firmID, inventoryItemID, purchase.SupplierID, receiptLine.ReceivedQuantity, receivedDate, note, s.currentUserID); err != nil {
 			return PartnerPurchase{}, err
 		}
 	}

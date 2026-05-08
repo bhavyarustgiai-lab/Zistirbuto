@@ -590,7 +590,7 @@ export const PartnerReceivablesSummarySchema = z.object({
 });
 
 export const PartnerStockActionInputSchema = z.object({
-  actionType: z.enum(["PURCHASE_INWARD", "RETURN_IN", "RETURN_OUT", "DAMAGE", "ADJUSTMENT"]),
+  actionType: z.enum(["RETURN_IN", "RETURN_OUT", "DAMAGE", "ADJUSTMENT"]),
   itemId: z.string().min(1),
   quantity: z.number().int().positive().optional(),
   quantityDelta: z.number().int().optional(),

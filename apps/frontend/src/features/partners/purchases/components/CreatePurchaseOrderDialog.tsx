@@ -6,7 +6,7 @@ import { Input } from "@components/ui/input";
 import { Select } from "@components/ui/select";
 import { Textarea } from "@components/ui/textarea";
 import { PartnerFieldLabel } from "@features/partners/PartnerFieldLabel";
-import type { PartnerStockRow, PartnerSupplier } from "@shared/types/domain";
+import type { PartnerCatalogItem, PartnerSupplier } from "@shared/types/domain";
 
 type PurchaseLine = {
   itemId: string;
@@ -19,7 +19,7 @@ type PurchaseLine = {
 type Props = {
   open: boolean;
   suppliers: PartnerSupplier[];
-  stockRows: PartnerStockRow[];
+  catalogItems: PartnerCatalogItem[];
   onClose: () => void;
   onSubmit: (input: {
     supplierId: string;
@@ -33,9 +33,9 @@ type Props = {
   }) => Promise<void>;
 };
 
-function defaultLine(stockRows: PartnerStockRow[]): PurchaseLine {
+function defaultLine(catalogItems: PartnerCatalogItem[]): PurchaseLine {
   return {
-    itemId: stockRows[0]?.itemId ?? "",
+    itemId: catalogItems[0]?.id ?? "",
     quantity: "1",
     costPrice: "",
     discountPercentage: "0",
@@ -43,7 +43,7 @@ function defaultLine(stockRows: PartnerStockRow[]): PurchaseLine {
   };
 }
 
-export function CreatePurchaseOrderDialog({ open, suppliers, stockRows, onClose, onSubmit }: Props) {
+export function CreatePurchaseOrderDialog({ open, suppliers, catalogItems, onClose, onSubmit }: Props) {
   const [supplierId, setSupplierId] = useState("");
   const [purchaseNumber, setPurchaseNumber] = useState("");
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("");
@@ -65,19 +65,22 @@ export function CreatePurchaseOrderDialog({ open, suppliers, stockRows, onClose,
     setPurchaseDate(new Date().toISOString().slice(0, 10));
     setExpectedInwardDate("");
     setNotes("");
-    setLines([defaultLine(stockRows)]);
+    setLines([defaultLine(catalogItems)]);
     setFieldErrors({});
     setFormError("");
     setSaving(false);
-  }, [open, stockRows, suppliers]);
+  }, [open, catalogItems, suppliers]);
 
   const supplierOptions = useMemo(
     () => suppliers.filter((supplier) => supplier.status === "ACTIVE").map((supplier) => ({ value: supplier.id, label: supplier.supplierName })),
     [suppliers],
   );
   const itemOptions = useMemo(
-    () => stockRows.map((item) => ({ value: item.itemId, label: `${item.itemName} · ${item.sku}` })),
-    [stockRows],
+    () =>
+      catalogItems
+        .filter((item) => item.status === "ACTIVE")
+        .map((item) => ({ value: item.id, label: `${item.name} · ${item.sku}` })),
+    [catalogItems],
   );
 
   const updateLine = (index: number, patch: Partial<PurchaseLine>) => {
@@ -161,7 +164,7 @@ export function CreatePurchaseOrderDialog({ open, suppliers, stockRows, onClose,
           </table>
         </div>
 
-        <Button variant="outline" className="h-10 w-fit px-3 text-sm" onClick={() => setLines((current) => [...current, defaultLine(stockRows)])}>
+        <Button variant="outline" className="h-10 w-fit px-3 text-sm" onClick={() => setLines((current) => [...current, defaultLine(catalogItems)])}>
           <Plus className="mr-1 h-4 w-4" />
           Add line
         </Button>

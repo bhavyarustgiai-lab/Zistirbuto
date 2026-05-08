@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Plus, Search } from "lucide-react";
 import { useAppState } from "@app/providers/AppStateProvider";
-import { usePartnerPurchases, usePartnerStock, usePartnerSuppliers } from "@entities/partners/hooks";
+import { usePartnerBrands, usePartnerCatalogItems, usePartnerPurchases, usePartnerSuppliers } from "@entities/partners/hooks";
 import { CreatePurchaseOrderDialog } from "@features/partners/purchases/components/CreatePurchaseOrderDialog";
 import { GoodsReceiptDialog } from "@features/partners/purchases/components/GoodsReceiptDialog";
 import { PurchaseOrderTable } from "@features/partners/purchases/components/PurchaseOrderTable";
@@ -32,7 +32,8 @@ export function PartnerPurchasesPage() {
   const { activePartnerFirmId } = useAppState();
   const purchases = usePartnerPurchases(activePartnerFirmId);
   const suppliers = usePartnerSuppliers(activePartnerFirmId, "");
-  const stock = usePartnerStock(activePartnerFirmId, "");
+  const brands = usePartnerBrands(activePartnerFirmId);
+  const catalog = usePartnerCatalogItems(activePartnerFirmId, brands.items.map((brand) => brand.id));
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
   const [showCreate, setShowCreate] = useState(false);
@@ -129,7 +130,7 @@ export function PartnerPurchasesPage() {
       <CreatePurchaseOrderDialog
         open={showCreate}
         suppliers={suppliers.items}
-        stockRows={stock.items}
+        catalogItems={catalog.items}
         onClose={() => setShowCreate(false)}
         onSubmit={purchases.create}
       />
