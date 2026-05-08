@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pencil, Plus, Search } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { ClipboardList, Pencil, Search } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAppState } from "@app/providers/AppStateProvider";
 import { usePartnerBrands, usePartnerInventory } from "@entities/partners/hooks";
-import { AddInventoryDrawer } from "@features/partners/AddInventoryDrawer";
 import { EditInventoryDrawer } from "@features/partners/EditInventoryDrawer";
 import { ExportCsvButton } from "@features/partners/ExportCsvButton";
 import {
@@ -40,7 +39,6 @@ export function PartnersStockPage() {
   const queryBrandId = searchParams.get("brand") ?? "";
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [search, setSearch] = useState("");
-  const [showAddDrawer, setShowAddDrawer] = useState(false);
   const [showEditDrawer, setShowEditDrawer] = useState(false);
   const [editingItemId, setEditingItemId] = useState("");
   const inventory = usePartnerInventory(activePartnerFirmId, selectedBrandId);
@@ -55,21 +53,27 @@ export function PartnersStockPage() {
       setSelectedBrandId("");
       return;
     }
-    if (queryBrandId && brands.items.some((brand) => String(brand.id) === queryBrandId)) {
-      setSelectedBrandId(queryBrandId);
-      return;
-    }
-    if (!selectedBrandId || !brands.items.some((brand) => String(brand.id) === selectedBrandId)) {
-      setSelectedBrandId(brands.items[0]?.id ? String(brands.items[0].id) : "");
-    }
-  }, [brands.items, queryBrandId, selectedBrandId]);
+    const nextBrandId =
+      queryBrandId && brands.items.some((brand) => String(brand.id) === queryBrandId)
+        ? queryBrandId
+        : brands.items[0]?.id
+          ? String(brands.items[0].id)
+          : "";
 
-  useEffect(() => {
-    if (!selectedBrandId) return;
+    setSelectedBrandId((current) => (current === nextBrandId ? current : nextBrandId));
+    if (nextBrandId && queryBrandId !== nextBrandId) {
+      const next = new URLSearchParams(searchParams);
+      next.set("brand", nextBrandId);
+      setSearchParams(next, { replace: true });
+    }
+  }, [brands.items, queryBrandId, searchParams, setSearchParams]);
+
+  function handleBrandChange(nextBrandId: string) {
+    setSelectedBrandId(nextBrandId);
     const next = new URLSearchParams(searchParams);
-    next.set("brand", selectedBrandId);
+    next.set("brand", nextBrandId);
     setSearchParams(next, { replace: true });
-  }, [searchParams, selectedBrandId, setSearchParams]);
+  }
 
   const filteredItems = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -99,10 +103,10 @@ export function PartnersStockPage() {
     <PartnersPageShell>
       <PartnersPageHeader
         title="Inventory"
-        description="Control stock-bearing configurations, opening quantities, and receipt history for one brand at a time."
+        description="Track available stock by brand. Supplier inward is handled through purchases and GRNs."
         actions={
           <div className="w-full sm:min-w-[320px] lg:w-[320px]">
-            <Select value={selectedBrandId} onValueChange={setSelectedBrandId} options={brandOptions} />
+            <Select value={selectedBrandId} onValueChange={handleBrandChange} options={brandOptions} />
           </div>
         }
       />
@@ -141,7 +145,7 @@ export function PartnersStockPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="pl-9"
-            placeholder="Search item, SKU, supplier, or status"
+            placeholder="Search item, SKU, or status"
           />
         </div>
         <div className="grid gap-3 md:grid-cols-3 xl:flex xl:flex-wrap xl:justify-end">
@@ -160,23 +164,22 @@ export function PartnersStockPage() {
             }}
           >
             <Pencil className="mr-1 h-4 w-4" />
-            Adjust inventory
+            Adjust stock
           </Button>
-          <Button
-            className="h-11 w-full px-3 text-sm sm:w-auto"
-            disabled={!selectedBrandId}
-            onClick={() => setShowAddDrawer(true)}
+          <Link
+            to="/partners/purchases"
+            className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-brand-500 px-3 text-sm font-medium text-white transition hover:bg-brand-600 sm:w-auto"
           >
-            <Plus className="mr-1 h-4 w-4" />
-            Add inventory
-          </Button>
+            <ClipboardList className="mr-1 h-4 w-4" />
+            Receive stock
+          </Link>
         </div>
       </PartnersPageFilters>
 
       <PartnersTableCard>
         {inventory.items.length === 0 ? (
           <div className="px-6 py-10">
-            <EmptyState>No inventory rows available for this brand.</EmptyState>
+            <EmptyState>No stock rows available for this brand. Receive stock from purchases or use adjustments for corrections.</EmptyState>
           </div>
         ) : filteredItems.length === 0 ? (
           <div className="px-6 py-10">
@@ -238,14 +241,6 @@ export function PartnersStockPage() {
           </div>
         )}
       </PartnersTableCard>
-
-      <AddInventoryDrawer
-        open={showAddDrawer}
-        onClose={() => setShowAddDrawer(false)}
-        firmId={activePartnerFirmId}
-        brandId={selectedBrandId}
-        onSubmitBatch={inventory.createBatch}
-      />
 
       <EditInventoryDrawer
         open={showEditDrawer}

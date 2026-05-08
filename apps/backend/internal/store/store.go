@@ -1266,17 +1266,6 @@ type UpdatePartnerBrandItemInput struct {
 	Status                    *string  `json:"status,omitempty"`
 }
 
-type CreatePartnerInventoryItemInput struct {
-	SupplierID         string  `json:"supplierId"`
-	ReceivedAt         string  `json:"receivedAt,omitempty"`
-	CatalogItemID      string  `json:"catalogItemId"`
-	MRP                int     `json:"mrp"`
-	DiscountPercentage float64 `json:"discountPercentage"`
-	Status             string  `json:"status,omitempty"`
-	Quantity           int     `json:"quantity"`
-	Note               string  `json:"note,omitempty"`
-}
-
 type UpdatePartnerInventoryItemInput struct {
 	Status   *string `json:"status,omitempty"`
 	Quantity *int    `json:"quantity,omitempty"`
@@ -1910,7 +1899,7 @@ func (s *Store) GetMe() (MeResponse, error) {
 		select e.id, e.name, e.client_type
 		from entities e
 		join entity_members m on m.entity_id = e.id
-		where m.user_id = $1 and m.status = 'ACTIVE'
+		where m.user_id = $1::bigint and m.status = 'ACTIVE'
 		order by e.created_at desc
 	`, currentUser.ID)
 	if err != nil {
@@ -1934,7 +1923,7 @@ func (s *Store) GetMe() (MeResponse, error) {
 		select m.user_id, m.entity_id, u.name, coalesce(u.avatar_url, ''), u.phone, m.role, m.status, m.joined_at
 		from entity_members m
 		join users u on u.id = m.user_id
-		where m.user_id = $1 and m.status = 'ACTIVE'
+		where m.user_id = $1::bigint and m.status = 'ACTIVE'
 		order by m.joined_at asc
 	`, currentUser.ID)
 	if err != nil {
@@ -1992,7 +1981,7 @@ func (s *Store) GetPartnersMe() (PartnerMeResponse, error) {
 			to_char(f.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		from partner_firm_memberships m
 		join partner_firms f on f.id = m.firm_id
-		where m.user_id = $1 and m.status = 'ACTIVE'
+		where m.user_id = $1::bigint and m.status = 'ACTIVE'
 		order by f.name asc
 	`, currentUser.ID)
 	if err != nil {
@@ -2146,7 +2135,7 @@ func (s *Store) UserHasPartnerFirmAccess(firmID string) bool {
 		select exists(
 			select 1
 			from partner_firm_memberships
-			where user_id = $1 and firm_id = $2 and status = 'ACTIVE'
+			where user_id = $1::bigint and firm_id = $2::bigint and status = 'ACTIVE'
 		)
 	`, s.currentUserID, firmID).Scan(&exists); err != nil {
 		return false
@@ -2160,7 +2149,7 @@ func (s *Store) CurrentUserPartnerFirmRole(firmID string) (PartnerFirmRole, bool
 	if err := s.pool.QueryRow(ctx, `
 		select role
 		from partner_firm_memberships
-		where user_id = $1 and firm_id = $2 and status = 'ACTIVE'
+		where user_id = $1::bigint and firm_id = $2::bigint and status = 'ACTIVE'
 		order by case role when 'OWNER' then 1 when 'ACCOUNTANT' then 2 when 'DELIVERY_PARTNER' then 3 when 'STAFF' then 4 else 5 end
 		limit 1
 	`, s.currentUserID, firmID).Scan(&role); err != nil {
@@ -2228,7 +2217,7 @@ func (s *Store) ActivatePartnerFirmInvitesForPhone(userID int64, phone string) e
 			select exists(
 				select 1
 				from partner_firm_memberships
-				where user_id = $1 and firm_id = $2 and role = $3
+				where user_id = $1::bigint and firm_id = $2::bigint and role = $3
 			)
 		`, userID, invite.FirmID, invite.Role).Scan(&membershipExists); err != nil {
 			return err
@@ -2260,7 +2249,7 @@ func (s *Store) GetPartnerFirmMemberships(firmID string) ([]PartnerFirmMembershi
 		       to_char(m.joined_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		from partner_firm_memberships m
 		join users u on u.id = m.user_id
-		where m.firm_id = $1
+		where m.firm_id = $1::bigint
 		order by
 			case m.role
 				when 'OWNER' then 1
@@ -2292,7 +2281,7 @@ func (s *Store) GetPartnerFirmInvites(firmID string) ([]PartnerFirmInvite, error
 	if _, err := s.pool.Exec(ctx, `
 		update partner_firm_invites
 		set status = 'EXPIRED'
-		where firm_id = $1 and status = 'PENDING' and expires_at <= now()
+		where firm_id = $1::bigint and status = 'PENDING' and expires_at <= now()
 	`, firmID); err != nil {
 		return nil, err
 	}
@@ -2303,7 +2292,7 @@ func (s *Store) GetPartnerFirmInvites(firmID string) ([]PartnerFirmInvite, error
 		       coalesce(to_char(accepted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), ''),
 		       to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		from partner_firm_invites
-		where firm_id = $1 and status = 'PENDING'
+		where firm_id = $1::bigint and status = 'PENDING'
 		order by created_at desc
 	`, firmID)
 	if err != nil {
@@ -2354,7 +2343,7 @@ func (s *Store) CreatePartnerFirmInvite(firmID string, input CreatePartnerFirmIn
 			select exists(
 				select 1
 				from partner_firm_memberships
-				where user_id = $1 and firm_id = $2 and role = $3
+				where user_id = $1::bigint and firm_id = $2::bigint and role = $3
 			)
 		`, existingUserID, firmID, role).Scan(&membershipExists); err != nil {
 			return CreatePartnerFirmInviteResult{}, err
@@ -2408,7 +2397,7 @@ func (s *Store) RemovePartnerFirmMembership(firmID, userID string, role PartnerF
 	err := s.pool.QueryRow(ctx, `
 		select role
 		from partner_firm_memberships
-		where firm_id = $1 and user_id = $2 and role = $3
+		where firm_id = $1::bigint and user_id = $2::bigint and role = $3
 	`, firmID, userID, role).Scan(&existingRole)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -2422,7 +2411,7 @@ func (s *Store) RemovePartnerFirmMembership(firmID, userID string, role PartnerF
 
 	tag, err := s.pool.Exec(ctx, `
 		delete from partner_firm_memberships
-		where firm_id = $1 and user_id = $2 and role = $3
+		where firm_id = $1::bigint and user_id = $2::bigint and role = $3
 	`, firmID, userID, role)
 	if err != nil {
 		return err
@@ -2437,7 +2426,7 @@ func (s *Store) RevokePartnerFirmInvite(firmID, inviteID string, role PartnerFir
 	ctx := context.Background()
 	tag, err := s.pool.Exec(ctx, `
 		delete from partner_firm_invites
-		where firm_id = $1 and id = $2 and role = $3 and status = 'PENDING'
+		where firm_id = $1::bigint and id = $2 and role = $3 and status = 'PENDING'
 	`, firmID, inviteID, role)
 	if err != nil {
 		return err
@@ -2499,7 +2488,7 @@ func (s *Store) CreatePartnerFirmBrand(firmID string, input CreatePartnerFirmBra
 			select exists(
 				select 1
 				from partner_firm_brands fb
-				where fb.firm_id = $1::bigint and fb.brand_id = $2
+				where fb.firm_id = $1::bigint and fb.brand_id = $2::bigint
 			)
 		`, firmID, brandID).Scan(&exists); err != nil {
 			return PartnerBrand{}, err
@@ -2664,7 +2653,7 @@ func (s *Store) CreatePartnerBrandItem(firmID, brandID string, input CreatePartn
 	if err := s.pool.QueryRow(ctx, `
 		select exists(
 			select 1 from partner_product_catalog
-			where brand_id = $1 and lower(sku) = lower($2)
+			where brand_id = $1::bigint and lower(sku) = lower($2)
 		)
 	`, brandID, sku).Scan(&exists); err != nil {
 		return PartnerCatalogItem{}, err
@@ -2708,8 +2697,8 @@ func (s *Store) UpdatePartnerBrandItem(firmID, brandID, itemID string, patch Upd
 		       coalesce(c.default_mrp, 0), coalesce(c.default_discount_percentage, 0)::float8, c.status,
 		       to_char(c.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		from partner_product_catalog c
-		join partner_firm_brands fb on fb.brand_id = c.brand_id and fb.firm_id = $1
-		where c.id = $2 and c.brand_id = $3
+		join partner_firm_brands fb on fb.brand_id = c.brand_id and fb.firm_id = $1::bigint
+		where c.id = $2 and c.brand_id = $3::bigint
 	`, firmID, itemID, brandID).Scan(
 		&current.ID,
 		&current.BrandID,
@@ -2812,7 +2801,7 @@ func (s *Store) GetPartnerClients(firmID, query string) ([]PartnerClient, error)
 		  on o.firm_id = b.firm_id
 		 and o.client_business_id = b.id
 		 and o.is_primary = true
-		where b.firm_id = $1
+		where b.firm_id = $1::bigint
 		  and (
 			$2 = ''
 			or lower(b.business_name) like lower('%' || $2 || '%')
@@ -2860,7 +2849,7 @@ func (s *Store) GetPartnerClientBusinesses(firmID, query string) ([]PartnerClien
 			coalesce(billing_name, ''),
 			coalesce(billing_address, '')
 		from partner_client_businesses
-		where firm_id = $1
+		where firm_id = $1::bigint
 		order by business_name asc
 	`, firmID)
 	if err != nil {
@@ -2897,7 +2886,7 @@ func (s *Store) GetPartnerClientBusinesses(firmID, query string) ([]PartnerClien
 	businessContactRows, err := s.pool.Query(ctx, `
 		select id, firm_id, client_business_id, name, phone, is_primary, sort_order
 		from partner_client_contacts
-		where firm_id = $1
+		where firm_id = $1::bigint
 		order by client_business_id asc, is_primary desc, sort_order asc, created_at asc
 	`, firmID)
 	if err != nil {
@@ -2938,7 +2927,7 @@ func (s *Store) GetPartnerClientBusinesses(firmID, query string) ([]PartnerClien
 			is_primary,
 			status
 		from partner_client_outlets
-		where firm_id = $1
+		where firm_id = $1::bigint
 		order by client_business_id asc, is_primary desc, outlet_name asc
 	`, firmID)
 	if err != nil {
@@ -2988,7 +2977,7 @@ func (s *Store) GetPartnerClientBusinesses(firmID, query string) ([]PartnerClien
 	outletContactRows, err := s.pool.Query(ctx, `
 		select id, firm_id, outlet_id, name, phone, is_primary, sort_order
 		from partner_client_outlet_contacts
-		where firm_id = $1
+		where firm_id = $1::bigint
 		order by outlet_id asc, is_primary desc, sort_order asc, created_at asc
 	`, firmID)
 	if err != nil {
@@ -3183,7 +3172,7 @@ func (s *Store) ValidatePartnerBusinessGSTIN(firmID, gstin, excludeBusinessID st
 	err := s.pool.QueryRow(ctx, `
 		select id, business_name
 		from partner_client_businesses
-		where firm_id = $1
+		where firm_id = $1::bigint
 		  and upper(trim(coalesce(gstin, ''))) = $2
 		  and ($3 = '' or id <> $3)
 		limit 1
@@ -3286,13 +3275,13 @@ func (s *Store) UpdatePartnerClientBusiness(firmID, businessID string, input Upd
 		    gstin = nullif($4, ''),
 		    billing_address = nullif($5, ''),
 		    updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, businessID, strings.TrimSpace(input.BusinessName), normalizeGSTIN(input.GSTIN), strings.TrimSpace(input.BillingAddress)); err != nil {
 		return PartnerClientBusiness{}, err
 	}
 	if _, err := tx.Exec(ctx, `
 		delete from partner_client_contacts
-		where firm_id = $1 and client_business_id = $2
+		where firm_id = $1::bigint and client_business_id = $2
 	`, firmID, businessID); err != nil {
 		return PartnerClientBusiness{}, err
 	}
@@ -3325,7 +3314,7 @@ func (s *Store) ArchivePartnerClientBusiness(firmID, businessID string) (Partner
 	result, err := s.pool.Exec(ctx, `
 		update partner_client_outlets
 		set status = 'INACTIVE', updated_at = now()
-		where firm_id = $1 and client_business_id = $2
+		where firm_id = $1::bigint and client_business_id = $2
 	`, firmID, businessID)
 	if err != nil {
 		return PartnerClientBusiness{}, err
@@ -3336,7 +3325,7 @@ func (s *Store) ArchivePartnerClientBusiness(firmID, businessID string) (Partner
 			select exists(
 				select 1
 				from partner_client_businesses
-				where firm_id = $1 and id = $2
+				where firm_id = $1::bigint and id = $2
 			)
 		`, firmID, businessID).Scan(&exists); err != nil {
 			return PartnerClientBusiness{}, err
@@ -3414,13 +3403,13 @@ func (s *Store) UpdatePartnerClientOutlet(firmID, businessID, outletID string, i
 		    address = nullif($5, ''),
 		    status = $6,
 		    updated_at = now()
-		where firm_id = $1 and client_business_id = $2 and id = $3
+		where firm_id = $1::bigint and client_business_id = $2 and id = $3
 	`, firmID, businessID, outletID, strings.TrimSpace(input.OutletName), strings.TrimSpace(input.Address), strings.TrimSpace(input.Status)); err != nil {
 		return PartnerClientBusiness{}, err
 	}
 	if _, err := s.pool.Exec(ctx, `
 		delete from partner_client_outlet_contacts
-		where firm_id = $1 and outlet_id = $2
+		where firm_id = $1::bigint and outlet_id = $2
 	`, firmID, outletID); err != nil {
 		return PartnerClientBusiness{}, err
 	}
@@ -3451,7 +3440,7 @@ func (s *Store) ArchivePartnerClientOutlet(firmID, businessID, outletID string) 
 	if err := s.pool.QueryRow(ctx, `
 		select outlet_name, coalesce(address, '')
 		from partner_client_outlets
-		where firm_id = $1 and client_business_id = $2 and id = $3
+		where firm_id = $1::bigint and client_business_id = $2 and id = $3
 	`, firmID, businessID, outletID).Scan(&current.OutletName, &current.Address); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return PartnerClientBusiness{}, fmt.Errorf("client outlet not found")
@@ -3461,7 +3450,7 @@ func (s *Store) ArchivePartnerClientOutlet(firmID, businessID, outletID string) 
 	rows, err := s.pool.Query(ctx, `
 		select name, phone
 		from partner_client_outlet_contacts
-		where firm_id = $1 and outlet_id = $2
+		where firm_id = $1::bigint and outlet_id = $2
 		order by is_primary desc, sort_order asc, created_at asc
 	`, firmID, outletID)
 	if err != nil {
@@ -3490,7 +3479,7 @@ func (s *Store) GetPartnerSuppliers(firmID, query string) ([]PartnerSupplier, er
 		       to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 		       to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		from partner_suppliers
-		where firm_id = $1
+		where firm_id = $1::bigint
 		  and ($2 = '' or lower(supplier_name) like lower('%' || $2 || '%') or coalesce(phone, '') like ('%' || $2 || '%'))
 		order by supplier_name asc
 	`, firmID, search)
@@ -3522,7 +3511,7 @@ func (s *Store) ValidatePartnerSupplierGSTIN(firmID, gstin, excludeSupplierID st
 	err := s.pool.QueryRow(ctx, `
 		select id, supplier_name
 		from partner_suppliers
-		where firm_id = $1
+		where firm_id = $1::bigint
 		  and upper(trim(coalesce(gstin, ''))) = $2
 		  and ($3 = '' or id <> $3)
 		limit 1
@@ -3599,7 +3588,7 @@ func (s *Store) UpdatePartnerSupplier(firmID, supplierID string, input UpdatePar
 		    address = nullif($6, ''),
 		    status = $7,
 		    updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, supplierID, name, normalizeGSTIN(input.GSTIN), strings.TrimSpace(input.Phone), strings.TrimSpace(input.Address), input.Status); err != nil {
 		return PartnerSupplier{}, err
 	}
@@ -3621,7 +3610,7 @@ func (s *Store) ArchivePartnerSupplier(firmID, supplierID string) (PartnerSuppli
 	if err := s.pool.QueryRow(ctx, `
 		select supplier_name, coalesce(gstin, ''), coalesce(phone, ''), coalesce(address, '')
 		from partner_suppliers
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, supplierID).Scan(&current.SupplierName, &current.GSTIN, &current.Phone, &current.Address); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return PartnerSupplier{}, fmt.Errorf("supplier not found")
@@ -3657,7 +3646,7 @@ func (s *Store) GetPartnerSupplierInvoices(firmID string, filters GetPartnerSupp
 		with paid as (
 			select firm_id, supplier_invoice_id, coalesce(sum(amount), 0)::float8 as paid_amount
 			from partner_supplier_payment_allocations
-			where firm_id = $1
+			where firm_id = $1::bigint
 			group by firm_id, supplier_invoice_id
 		)
 		select
@@ -3683,7 +3672,7 @@ func (s *Store) GetPartnerSupplierInvoices(firmID string, filters GetPartnerSupp
 		left join users cu on cu.id = i.created_by
 		left join users fu on fu.id = i.finalized_by
 		left join users canu on canu.id = i.cancelled_by
-		where i.firm_id = $1
+		where i.firm_id = $1::bigint
 		  and ($2 = '' or i.supplier_id = $2)
 		  and ($3 = '' or i.invoice_date >= $3::date)
 		  and ($4 = '' or i.invoice_date <= $4::date)
@@ -3781,7 +3770,7 @@ func (s *Store) CreatePartnerSupplierInvoice(firmID string, input CreatePartnerS
 	if err := tx.QueryRow(ctx, `
 		select supplier_name, status
 		from partner_suppliers
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, supplierID).Scan(&supplierName, &supplierStatus); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return PartnerSupplierInvoice{}, fmt.Errorf("supplier not found")
@@ -3795,7 +3784,7 @@ func (s *Store) CreatePartnerSupplierInvoice(firmID string, input CreatePartnerS
 	grnID := strings.TrimSpace(input.GRNID)
 	if purchaseID != "" {
 		var purchaseSupplierID string
-		if err := tx.QueryRow(ctx, `select supplier_id from partner_purchases where firm_id = $1 and id = $2`, firmID, purchaseID).Scan(&purchaseSupplierID); err != nil {
+		if err := tx.QueryRow(ctx, `select supplier_id from partner_purchases where firm_id = $1::bigint and id = $2`, firmID, purchaseID).Scan(&purchaseSupplierID); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return PartnerSupplierInvoice{}, fmt.Errorf("purchase not found")
 			}
@@ -3807,7 +3796,7 @@ func (s *Store) CreatePartnerSupplierInvoice(firmID string, input CreatePartnerS
 	}
 	if grnID != "" {
 		var grnSupplierID, grnPurchaseID string
-		if err := tx.QueryRow(ctx, `select supplier_id, purchase_id from partner_goods_receipts where firm_id = $1 and id = $2`, firmID, grnID).Scan(&grnSupplierID, &grnPurchaseID); err != nil {
+		if err := tx.QueryRow(ctx, `select supplier_id, purchase_id from partner_goods_receipts where firm_id = $1::bigint and id = $2`, firmID, grnID).Scan(&grnSupplierID, &grnPurchaseID); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return PartnerSupplierInvoice{}, fmt.Errorf("GRN not found")
 			}
@@ -3876,7 +3865,7 @@ func (s *Store) FinalizePartnerSupplierInvoice(firmID, invoiceID string) (Partne
 		select supplier_id, invoice_number, invoice_date::text, coalesce(due_date::text, ''), status,
 		       coalesce(nullif(final_total_amount, 0), total_amount)::float8
 		from partner_supplier_invoices
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 		for update
 	`, firmID, invoiceID).Scan(&supplierID, &invoiceNumber, &invoiceDate, &dueDate, &status, &amount); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -3897,7 +3886,7 @@ func (s *Store) FinalizePartnerSupplierInvoice(firmID, invoiceID string) (Partne
 	if _, err := tx.Exec(ctx, `
 		update partner_supplier_invoices
 		set status = 'FINALIZED', payable_status = $3, finalized_at = now(), finalized_by = $4, updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, invoiceID, payableStatus, s.currentUserID); err != nil {
 		return PartnerSupplierInvoice{}, err
 	}
@@ -3939,7 +3928,7 @@ func (s *Store) CreatePartnerSupplierPayment(firmID string, input CreatePartnerS
 		select supplier_id, invoice_number, invoice_date::text, status, coalesce(due_date::text, ''),
 		       coalesce(nullif(final_total_amount, 0), total_amount)::float8
 		from partner_supplier_invoices
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 		for update
 	`, firmID, invoiceID).Scan(&supplierID, &invoiceNumber, &invoiceDate, &status, &dueDate, &finalTotal); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -3951,7 +3940,7 @@ func (s *Store) CreatePartnerSupplierPayment(firmID string, input CreatePartnerS
 		return PartnerSupplierPayment{}, fmt.Errorf("payments can only be recorded against finalized supplier invoices")
 	}
 	var paid float64
-	if err := tx.QueryRow(ctx, `select coalesce(sum(amount), 0)::float8 from partner_supplier_payment_allocations where firm_id = $1 and supplier_invoice_id = $2`, firmID, invoiceID).Scan(&paid); err != nil {
+	if err := tx.QueryRow(ctx, `select coalesce(sum(amount), 0)::float8 from partner_supplier_payment_allocations where firm_id = $1::bigint and supplier_invoice_id = $2`, firmID, invoiceID).Scan(&paid); err != nil {
 		return PartnerSupplierPayment{}, err
 	}
 	outstanding := math.Max(roundCurrency(finalTotal-paid), 0)
@@ -3977,7 +3966,7 @@ func (s *Store) CreatePartnerSupplierPayment(firmID string, input CreatePartnerS
 	if _, err := tx.Exec(ctx, `
 		update partner_supplier_invoices
 		set paid_amount = $3, outstanding_amount = $4, payable_status = $5, updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, invoiceID, nextPaid, math.Max(roundCurrency(finalTotal-nextPaid), 0), nextStatus); err != nil {
 		return PartnerSupplierPayment{}, err
 	}
@@ -4024,7 +4013,7 @@ func (s *Store) GetPartnerSupplierPayments(firmID string, filters GetPartnerSupp
 		from partner_supplier_payments p
 		join partner_suppliers s on s.firm_id = p.firm_id and s.id = p.supplier_id
 		left join users u on u.id = p.created_by
-		where p.firm_id = $1
+		where p.firm_id = $1::bigint
 		  and ($2 = '' or p.supplier_id = $2)
 		  and ($3 = '' or p.payment_date >= $3::date)
 		  and ($4 = '' or p.payment_date <= $4::date)
@@ -4062,7 +4051,7 @@ func (s *Store) GetPartnerSupplierPayments(firmID string, filters GetPartnerSupp
 		       coalesce(nullif(i.final_total_amount, 0), i.total_amount)::float8, pa.amount::float8
 		from partner_supplier_payment_allocations pa
 		join partner_supplier_invoices i on i.firm_id = pa.firm_id and i.id = pa.supplier_invoice_id
-		where pa.firm_id = $1
+		where pa.firm_id = $1::bigint
 		order by pa.created_at asc
 	`, firmID)
 	if err != nil {
@@ -4109,7 +4098,7 @@ func (s *Store) insertPartnerSupplierLedgerEntryTx(ctx context.Context, tx pgx.T
 		select exists(
 			select 1
 			from partner_supplier_ledger_entries
-			where firm_id = $1 and reference_id = $2 and entry_type = $3
+			where firm_id = $1::bigint and reference_id = $2 and entry_type = $3
 		)
 	`, firmID, referenceID, entryType).Scan(&exists); err != nil {
 		return err
@@ -4122,7 +4111,7 @@ func (s *Store) insertPartnerSupplierLedgerEntryTx(ctx context.Context, tx pgx.T
 		select coalesce((
 			select running_balance
 			from partner_supplier_ledger_entries
-			where firm_id = $1 and supplier_id = $2
+			where firm_id = $1::bigint and supplier_id = $2
 			order by entry_date desc, created_at desc
 			limit 1
 		), 0)::float8
@@ -4152,7 +4141,7 @@ func (s *Store) GetPartnerSupplierLedger(firmID string, filters GetPartnerSuppli
 			to_char(e.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		from partner_supplier_ledger_entries e
 		join partner_suppliers s on s.firm_id = e.firm_id and s.id = e.supplier_id
-		where e.firm_id = $1
+		where e.firm_id = $1::bigint
 		  and ($2 = '' or e.supplier_id = $2)
 		  and ($3 = '' or e.entry_date >= $3::date)
 		  and ($4 = '' or e.entry_date <= $4::date)
@@ -4244,7 +4233,7 @@ func (s *Store) GetPartnerDashboard(firmID string) (PartnerDashboardStats, error
 			from partner_orders o
 			join partner_client_businesses cb on cb.id = o.client_business_id and cb.firm_id = o.firm_id
 			join partner_client_outlets co on co.id = o.client_outlet_id and co.client_business_id = o.client_business_id and co.firm_id = o.firm_id
-			where o.firm_id = $1
+			where o.firm_id = $1::bigint
 
 			union all
 
@@ -4274,7 +4263,7 @@ func (s *Store) GetPartnerDashboard(firmID string) (PartnerDashboardStats, error
 			join partner_firm_inventory_items i on i.item_id = r.item_id and i.firm_id = r.firm_id
 			join partner_product_catalog c on c.id = i.catalog_item_id
 			left join partner_suppliers s on s.id = r.supplier_id and s.firm_id = r.firm_id
-			where r.firm_id = $1
+			where r.firm_id = $1::bigint
 
 			union all
 
@@ -4296,7 +4285,7 @@ func (s *Store) GetPartnerDashboard(firmID string) (PartnerDashboardStats, error
 			from partner_inventory_adjustments a
 			join partner_firm_inventory_items i on i.item_id = a.item_id and i.firm_id = a.firm_id
 			join partner_product_catalog c on c.id = i.catalog_item_id
-			where a.firm_id = $1
+			where a.firm_id = $1::bigint
 		) a
 		order by created_at desc
 		limit 5
@@ -4366,7 +4355,7 @@ func (s *Store) GetPartnerOrders(firmID string) ([]PartnerOrder, error) {
 		join partner_client_businesses b on b.id = o.client_business_id and b.firm_id = o.firm_id
 		join partner_client_outlets co on co.id = o.client_outlet_id and co.client_business_id = o.client_business_id and co.firm_id = o.firm_id
 		left join users u on u.id = o.created_by
-			where o.firm_id = $1
+			where o.firm_id = $1::bigint
 		order by o.order_date desc, o.created_at desc
 	`, firmID)
 	if err != nil {
@@ -4406,7 +4395,7 @@ func (s *Store) GetPartnerOrders(firmID string) ([]PartnerOrder, error) {
 			id, order_id, brand_id, catalog_item_id, item_code, item_name, unit, requested_quantity,
 			mrp::float8, discount_percentage::float8
 		from partner_order_requested_items
-		where firm_id = $1
+		where firm_id = $1::bigint
 		order by created_at asc
 	`, firmID)
 	if err != nil {
@@ -4435,7 +4424,7 @@ func (s *Store) GetPartnerOrders(firmID string) ([]PartnerOrder, error) {
 		select id, order_id, catalog_item_id, item_code, item_name, quantity,
 		       mrp::float8, seller_margin_percentage::float8, rate::float8, line_total::float8
 		from partner_order_billable_lines
-		where firm_id = $1
+		where firm_id = $1::bigint
 		order by created_at asc
 	`, firmID)
 	if err != nil {
@@ -4466,7 +4455,7 @@ func (s *Store) GetPartnerOrders(firmID string) ([]PartnerOrder, error) {
 			oi.mrp::float8, oi.discount_percentage::float8
 		from partner_order_items oi
 		left join partner_firm_inventory_items fi on fi.firm_id = oi.firm_id and fi.item_id = oi.item_id
-		where oi.firm_id = $1
+		where oi.firm_id = $1::bigint
 		order by oi.created_at asc
 	`, firmID)
 	if err != nil {
@@ -4500,7 +4489,7 @@ func (s *Store) GetPartnerOrders(firmID string) ([]PartnerOrder, error) {
 			to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 			coalesce(to_char(cleared_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), '')
 		from partner_unfulfilled_order_items
-		where firm_id = $1
+		where firm_id = $1::bigint
 		order by created_at desc
 	`, firmID)
 	if err != nil {
@@ -4580,7 +4569,7 @@ func (s *Store) CreatePartnerOrder(firmID string, input CreatePartnerOrderInput)
 	if err := tx.QueryRow(ctx, `
 		select 'ORD-' || lpad((coalesce(count(*), 0) + 1001)::text, 4, '0')
 		from partner_orders
-		where firm_id = $1
+		where firm_id = $1::bigint
 	`, firmID).Scan(&orderNumber); err != nil {
 		return PartnerOrder{}, err
 	}
@@ -4605,7 +4594,7 @@ func (s *Store) CreatePartnerOrder(firmID string, input CreatePartnerOrderInput)
 			       coalesce(c.default_mrp, 0), coalesce(c.default_discount_percentage, 0)::float8, c.status,
 			       to_char(c.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 			from partner_product_catalog c
-			join partner_firm_brands fb on fb.brand_id = c.brand_id and fb.firm_id = $1
+			join partner_firm_brands fb on fb.brand_id = c.brand_id and fb.firm_id = $1::bigint
 			where c.id = $2
 		`, firmID, line.ItemID).Scan(&item.ID, &item.BrandID, &item.Name, &item.Description, &item.HSNCode, &item.SKU, &item.DefaultMRP, &item.DefaultDiscountPercentage, &item.Status, &item.UpdatedAt)
 		if err != nil {
@@ -4705,7 +4694,7 @@ func (s *Store) UpdatePartnerOrder(firmID, orderID string, input UpdatePartnerOr
 			       coalesce(c.default_mrp, 0), coalesce(c.default_discount_percentage, 0)::float8, c.status,
 			       to_char(c.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 			from partner_product_catalog c
-			join partner_firm_brands fb on fb.brand_id = c.brand_id and fb.firm_id = $1
+			join partner_firm_brands fb on fb.brand_id = c.brand_id and fb.firm_id = $1::bigint
 			where c.id = $2
 		`, firmID, itemID).Scan(&item.ID, &item.BrandID, &item.Name, &item.Description, &item.HSNCode, &item.SKU, &item.DefaultMRP, &item.DefaultDiscountPercentage, &item.Status, &item.UpdatedAt)
 		if err != nil {
@@ -4764,19 +4753,19 @@ func (s *Store) UpdatePartnerOrder(firmID, orderID string, input UpdatePartnerOr
 		    source = $5,
 		    notes = nullif($6, ''),
 		    updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, orderID, strings.TrimSpace(input.ClientBusinessID), strings.TrimSpace(input.ClientOutletID), source, strings.TrimSpace(input.Notes)); err != nil {
 		return PartnerOrder{}, err
 	}
 	if _, err := tx.Exec(ctx, `
 		delete from partner_order_items
-		where firm_id = $1 and order_id = $2
+		where firm_id = $1::bigint and order_id = $2
 	`, firmID, orderID); err != nil {
 		return PartnerOrder{}, err
 	}
 	if _, err := tx.Exec(ctx, `
 		delete from partner_order_requested_items
-		where firm_id = $1 and order_id = $2
+		where firm_id = $1::bigint and order_id = $2
 	`, firmID, orderID); err != nil {
 		return PartnerOrder{}, err
 	}
@@ -4860,7 +4849,7 @@ func (s *Store) UpdatePartnerOrderStatusWithInput(firmID, orderID string, input 
 	if err := tx.QueryRow(ctx, `
 		select status
 		from partner_orders
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 		for update
 	`, firmID, orderID).Scan(&currentStatus); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -4939,7 +4928,7 @@ func (s *Store) UpdatePartnerOrderStatusWithInput(firmID, orderID string, input 
 		    delivered_at = case when $3 in ('DELIVERED', 'PARTIALLY_DELIVERED') then now() else delivered_at end,
 		    cancelled_at = case when $3 = 'CANCELLED' then now() else cancelled_at end,
 		    updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`
 	if _, err := tx.Exec(ctx, query, firmID, orderID, nextStatus); err != nil {
 		return PartnerOrder{}, err
@@ -4962,7 +4951,7 @@ func loadPartnerOrderTransitionLines(ctx context.Context, tx pgx.Tx, firmID, ord
 	rows, err := tx.Query(ctx, `
 		select id, item_id, item_name, quantity, packed_quantity, dispatched_quantity, delivered_quantity, returned_quantity, cancelled_quantity, coalesce(short_reason, '')
 		from partner_order_items
-		where firm_id = $1 and order_id = $2
+		where firm_id = $1::bigint and order_id = $2
 		order by created_at asc
 		for update
 	`, firmID, orderID)
@@ -5033,7 +5022,7 @@ func (s *Store) confirmPartnerOrderTx(ctx context.Context, tx pgx.Tx, firmID, or
 	if err := tx.QueryRow(ctx, `
 		select client_business_id, client_outlet_id
 		from partner_orders
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, orderID).Scan(&clientBusinessID, &clientOutletID); err != nil {
 		return err
 	}
@@ -5053,7 +5042,7 @@ func (s *Store) confirmPartnerOrderTx(ctx context.Context, tx pgx.Tx, firmID, or
 		if _, err := tx.Exec(ctx, `
 			update partner_order_requested_items
 			set discount_percentage = $3
-			where firm_id = $1 and order_id = $2
+			where firm_id = $1::bigint and order_id = $2
 		`, firmID, orderID, resolvedSellerMargin); err != nil {
 			return err
 		}
@@ -5082,7 +5071,7 @@ func (s *Store) confirmPartnerOrderTx(ctx context.Context, tx pgx.Tx, firmID, or
 			if _, err := tx.Exec(ctx, `
 				update partner_order_requested_items
 				set discount_percentage = $4
-				where firm_id = $1 and order_id = $2 and catalog_item_id = $3
+				where firm_id = $1::bigint and order_id = $2 and catalog_item_id = $3
 			`, firmID, orderID, requestedLines[idx].CatalogItemID, resolvedSellerMargin); err != nil {
 				return err
 			}
@@ -5104,7 +5093,7 @@ func (s *Store) confirmPartnerOrderTx(ctx context.Context, tx pgx.Tx, firmID, or
 			rows, err := tx.Query(ctx, `
 				select item_id, quantity
 				from partner_firm_inventory_items
-				where firm_id = $1 and catalog_item_id = $2 and status = 'ACTIVE' and quantity > 0
+				where firm_id = $1::bigint and catalog_item_id = $2 and status = 'ACTIVE' and quantity > 0
 				order by updated_at asc, item_id asc
 				for update
 			`, firmID, line.CatalogItemID)
@@ -5160,7 +5149,7 @@ func (s *Store) confirmPartnerOrderTx(ctx context.Context, tx pgx.Tx, firmID, or
 			from partner_firm_inventory_items i
 			join partner_product_catalog c on c.id = i.catalog_item_id
 			join partner_firm_brands fb on fb.brand_id = c.brand_id and fb.firm_id = i.firm_id
-			where i.firm_id = $1 and i.item_id = $2 and i.status = 'ACTIVE'
+			where i.firm_id = $1::bigint and i.item_id = $2 and i.status = 'ACTIVE'
 			for update
 		`, firmID, itemID).Scan(
 			&allocation.ItemID,
@@ -5194,19 +5183,19 @@ func (s *Store) confirmPartnerOrderTx(ctx context.Context, tx pgx.Tx, firmID, or
 
 	if _, err := tx.Exec(ctx, `
 		delete from partner_order_items
-		where firm_id = $1 and order_id = $2
+		where firm_id = $1::bigint and order_id = $2
 	`, firmID, orderID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `
 		delete from partner_order_billable_lines
-		where firm_id = $1 and order_id = $2
+		where firm_id = $1::bigint and order_id = $2
 	`, firmID, orderID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `
 		delete from partner_unfulfilled_order_items
-		where firm_id = $1 and source_order_id = $2
+		where firm_id = $1::bigint and source_order_id = $2
 	`, firmID, orderID); err != nil {
 		return err
 	}
@@ -5292,7 +5281,7 @@ func loadPartnerOrderRequestedLinesTx(ctx context.Context, tx pgx.Tx, firmID, or
 		select id, brand_id, catalog_item_id, item_code, item_name, unit, requested_quantity,
 		       mrp::float8, discount_percentage::float8
 		from partner_order_requested_items
-		where firm_id = $1 and order_id = $2
+		where firm_id = $1::bigint and order_id = $2
 		order by created_at asc
 		for update
 	`, firmID, orderID)
@@ -5325,7 +5314,7 @@ func clearPartnerUnfulfilledDemandTx(ctx context.Context, tx pgx.Tx, firmID, cli
 	rows, err := tx.Query(ctx, `
 		select id, open_quantity
 		from partner_unfulfilled_order_items
-		where firm_id = $1
+		where firm_id = $1::bigint
 		  and client_business_id = $2
 		  and client_outlet_id = $3
 		  and catalog_item_id = $4
@@ -5374,7 +5363,7 @@ func clearPartnerUnfulfilledDemandTx(ctx context.Context, tx pgx.Tx, firmID, cli
 			    status = $4,
 			    cleared_at = case when $4 = 'CLEARED' then now() else cleared_at end,
 			    updated_at = now()
-			where firm_id = $1 and id = $5
+			where firm_id = $1::bigint and id = $5
 		`, firmID, cleared, nextOpen, status, row.ID); err != nil {
 			return err
 		}
@@ -5459,7 +5448,7 @@ func packPartnerOrderTx(ctx context.Context, tx pgx.Tx, firmID, orderID string, 
 			update partner_order_items
 			set packed_quantity = $3,
 			    short_reason = nullif($4, '')
-			where firm_id = $1 and order_id = $2 and id = $5
+			where firm_id = $1::bigint and order_id = $2 and id = $5
 		`, firmID, orderID, input.PackedQuantity, shortReason, line.ID); err != nil {
 			return err
 		}
@@ -5501,7 +5490,7 @@ func markPartnerOrderDeliveredTx(ctx context.Context, tx pgx.Tx, firmID, orderID
 		if _, err := tx.Exec(ctx, `
 			update partner_order_items
 			set delivered_quantity = $3
-			where firm_id = $1 and order_id = $2 and item_id = $4
+			where firm_id = $1::bigint and order_id = $2 and item_id = $4
 		`, firmID, orderID, target, line.ItemID); err != nil {
 			return err
 		}
@@ -5566,7 +5555,7 @@ func markPartnerOrderDeliveredWithInputTx(ctx context.Context, tx pgx.Tx, firmID
 			update partner_order_items
 			set delivered_quantity = $3,
 			    returned_quantity = $4
-			where firm_id = $1 and order_id = $2 and id = $5
+			where firm_id = $1::bigint and order_id = $2 and id = $5
 		`, firmID, orderID, targetDelivered, targetReturned, line.ID); err != nil {
 			return err
 		}
@@ -5584,7 +5573,7 @@ func markPartnerOrderDeliveredWithInputTx(ctx context.Context, tx pgx.Tx, firmID
 		    delivery_proof_reference = nullif($5, ''),
 		    delivery_notes = nullif($6, ''),
 		    updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, orderID, strings.TrimSpace(details.DeliveredDate), strings.TrimSpace(details.RecipientName), strings.TrimSpace(details.ProofReference), strings.TrimSpace(details.Notes)); err != nil {
 		return err
 	}
@@ -5629,7 +5618,7 @@ func (s *Store) dispatchPartnerOrderTx(ctx context.Context, tx pgx.Tx, firmID, o
 		if _, err := tx.Exec(ctx, `
 			update partner_order_items
 			set dispatched_quantity = $3
-			where firm_id = $1 and order_id = $2 and id = $4
+			where firm_id = $1::bigint and order_id = $2 and id = $4
 		`, firmID, orderID, target, line.ID); err != nil {
 			return err
 		}
@@ -5645,7 +5634,7 @@ func (s *Store) dispatchPartnerOrderTx(ctx context.Context, tx pgx.Tx, firmID, o
 		    driver_phone = nullif($6, ''),
 		    dispatch_notes = nullif($7, ''),
 		    updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, orderID, strings.TrimSpace(details.DispatchDate), strings.TrimSpace(details.TransportName), strings.TrimSpace(details.VehicleNumber), strings.TrimSpace(details.DriverPhone), strings.TrimSpace(details.Notes)); err != nil {
 		return err
 	}
@@ -5691,7 +5680,7 @@ func (s *Store) returnPartnerOrderTx(ctx context.Context, tx pgx.Tx, firmID, ord
 		if _, err := tx.Exec(ctx, `
 			update partner_order_items
 			set returned_quantity = $3
-			where firm_id = $1 and order_id = $2 and item_id = $4
+			where firm_id = $1::bigint and order_id = $2 and item_id = $4
 		`, firmID, orderID, target, line.ItemID); err != nil {
 			return "", err
 		}
@@ -5740,7 +5729,7 @@ func (s *Store) GetPartnerOrderReturns(firmID, orderID string) ([]PartnerSalesRe
 		join partner_client_businesses b on b.firm_id = r.firm_id and b.id = r.client_business_id
 		join partner_client_outlets co on co.firm_id = r.firm_id and co.client_business_id = r.client_business_id and co.id = r.client_outlet_id
 		left join users u on u.id = r.created_by
-		where r.firm_id = $1 and r.order_id = $2
+		where r.firm_id = $1::bigint and r.order_id = $2
 		order by r.return_date desc, r.created_at desc
 	`, firmID, orderID)
 	if err != nil {
@@ -5773,7 +5762,7 @@ func (s *Store) GetPartnerOrderReturns(firmID, orderID string) ([]PartnerSalesRe
 		select id, sales_return_id, order_item_id, coalesce(invoice_line_id, ''), item_id, item_name,
 		       returned_quantity, accepted_quantity, credit_amount::float8, coalesce(reason, '')
 		from partner_sales_return_lines
-		where firm_id = $1
+		where firm_id = $1::bigint
 		order by created_at asc
 	`, firmID)
 	if err != nil {
@@ -5823,7 +5812,7 @@ func (s *Store) CreatePartnerOrderReturn(firmID, orderID string, input CreatePar
 	if err := tx.QueryRow(ctx, `
 		select status, client_business_id, client_outlet_id
 		from partner_orders
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 		for update
 	`, firmID, orderID).Scan(&orderStatus, &clientBusinessID, &clientOutletID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -5842,7 +5831,7 @@ func (s *Store) CreatePartnerOrderReturn(firmID, orderID string, input CreatePar
 	if err := tx.QueryRow(ctx, `
 		select id, invoice_number, status, amount::float8
 		from partner_invoices
-		where firm_id = $1 and order_id = $2 and status <> 'CANCELLED'
+		where firm_id = $1::bigint and order_id = $2 and status <> 'CANCELLED'
 		order by created_at desc
 		limit 1
 		for update
@@ -5872,7 +5861,7 @@ func (s *Store) CreatePartnerOrderReturn(firmID, orderID string, input CreatePar
 				(coalesce(oi.billable_line_id, '') <> '' and ii.order_billable_line_id = oi.billable_line_id)
 				or (coalesce(oi.billable_line_id, '') = '' and ii.item_id = oi.item_id)
 			)
-		where oi.firm_id = $1 and oi.order_id = $2
+		where oi.firm_id = $1::bigint and oi.order_id = $2
 		for update of oi
 	`, firmID, orderID, invoiceID)
 	if err != nil {
@@ -5934,7 +5923,7 @@ func (s *Store) CreatePartnerOrderReturn(firmID, orderID string, input CreatePar
 	if err := tx.QueryRow(ctx, `
 		select 'SR-' || lpad((coalesce(count(*), 0) + 1001)::text, 4, '0')
 		from partner_sales_returns
-		where firm_id = $1
+		where firm_id = $1::bigint
 	`, firmID).Scan(&returnNumber); err != nil {
 		return CreatePartnerOrderReturnResponse{}, err
 	}
@@ -5952,7 +5941,7 @@ func (s *Store) CreatePartnerOrderReturn(firmID, orderID string, input CreatePar
 	if err := tx.QueryRow(ctx, `
 		select 'CN-' || lpad((coalesce(count(*), 0) + 1001)::text, 4, '0')
 		from partner_credit_notes
-		where firm_id = $1
+		where firm_id = $1::bigint
 	`, firmID).Scan(&creditNoteNumber); err != nil {
 		return CreatePartnerOrderReturnResponse{}, err
 	}
@@ -5974,16 +5963,16 @@ func (s *Store) CreatePartnerOrderReturn(firmID, orderID string, input CreatePar
 		if _, err := tx.Exec(ctx, `
 			update partner_order_items
 			set returned_quantity = returned_quantity + $3
-			where firm_id = $1 and id = $2
+			where firm_id = $1::bigint and id = $2
 		`, firmID, line.OrderItemID, line.RequestedQty); err != nil {
 			return CreatePartnerOrderReturnResponse{}, err
 		}
 	}
 	var existingCredits, existingDebits float64
-	if err := tx.QueryRow(ctx, `select coalesce(sum(total_amount), 0)::float8 from partner_credit_notes where firm_id = $1 and related_invoice_id = $2 and status = 'ISSUED'`, firmID, invoiceID).Scan(&existingCredits); err != nil {
+	if err := tx.QueryRow(ctx, `select coalesce(sum(total_amount), 0)::float8 from partner_credit_notes where firm_id = $1::bigint and related_invoice_id = $2 and status = 'ISSUED'`, firmID, invoiceID).Scan(&existingCredits); err != nil {
 		return CreatePartnerOrderReturnResponse{}, err
 	}
-	if err := tx.QueryRow(ctx, `select coalesce(sum(total_amount), 0)::float8 from partner_debit_notes where firm_id = $1 and related_invoice_id = $2 and status = 'ISSUED'`, firmID, invoiceID).Scan(&existingDebits); err != nil {
+	if err := tx.QueryRow(ctx, `select coalesce(sum(total_amount), 0)::float8 from partner_debit_notes where firm_id = $1::bigint and related_invoice_id = $2 and status = 'ISSUED'`, firmID, invoiceID).Scan(&existingDebits); err != nil {
 		return CreatePartnerOrderReturnResponse{}, err
 	}
 	if roundCurrency(totalCredit) > math.Max(roundCurrency(invoiceAmount-existingCredits+existingDebits), 0) {
@@ -6010,7 +5999,7 @@ func (s *Store) CreatePartnerOrderReturn(firmID, orderID string, input CreatePar
 	if _, err := tx.Exec(ctx, `
 		update partner_sales_returns
 		set credit_note_id = $3
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, returnID, creditNoteID); err != nil {
 		return CreatePartnerOrderReturnResponse{}, err
 	}
@@ -6029,7 +6018,7 @@ func (s *Store) CreatePartnerOrderReturn(firmID, orderID string, input CreatePar
 		update partner_orders
 		set status = $3,
 		    updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, orderID, nextStatus); err != nil {
 		return CreatePartnerOrderReturnResponse{}, err
 	}
@@ -6109,7 +6098,7 @@ func resolvePartnerOrderJourneyStatusAfterReturnTx(ctx context.Context, tx pgx.T
 			coalesce(sum(returned_quantity), 0)::int,
 			coalesce(sum(delivered_quantity), 0)::int
 		from partner_order_items
-		where firm_id = $1 and order_id = $2
+		where firm_id = $1::bigint and order_id = $2
 	`, firmID, orderID).Scan(&dispatchedQuantity, &returnedQuantity, &deliveredQuantity); err != nil {
 		return "", err
 	}
@@ -6146,7 +6135,7 @@ func (s *Store) VoidPartnerOrderReturn(firmID, orderID, returnID string) (VoidPa
 		left join partner_credit_notes cn on cn.firm_id = r.firm_id and cn.id = r.credit_note_id
 		join partner_client_businesses b on b.firm_id = r.firm_id and b.id = r.client_business_id
 		join partner_client_outlets co on co.firm_id = r.firm_id and co.client_business_id = r.client_business_id and co.id = r.client_outlet_id
-		where r.firm_id = $1 and r.order_id = $2 and r.id = $3
+		where r.firm_id = $1::bigint and r.order_id = $2 and r.id = $3
 		for update of r
 	`, firmID, orderID, returnID).Scan(
 		&salesReturn.ID, &salesReturn.FirmID, &salesReturn.ReturnNumber, &salesReturn.OrderID, &salesReturn.InvoiceID, &salesReturn.InvoiceNumber,
@@ -6170,7 +6159,7 @@ func (s *Store) VoidPartnerOrderReturn(firmID, orderID, returnID string) (VoidPa
 	if err := tx.QueryRow(ctx, `
 		select status
 		from partner_credit_notes
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 		for update
 	`, firmID, salesReturn.CreditNoteID).Scan(&creditNoteStatus); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -6186,7 +6175,7 @@ func (s *Store) VoidPartnerOrderReturn(firmID, orderID, returnID string) (VoidPa
 		select id, sales_return_id, order_item_id, coalesce(invoice_line_id, ''), item_id, item_name,
 		       returned_quantity, accepted_quantity, credit_amount::float8, coalesce(reason, '')
 		from partner_sales_return_lines
-		where firm_id = $1 and sales_return_id = $2
+		where firm_id = $1::bigint and sales_return_id = $2
 		order by created_at asc
 	`, firmID, returnID)
 	if err != nil {
@@ -6218,7 +6207,7 @@ func (s *Store) VoidPartnerOrderReturn(firmID, orderID, returnID string) (VoidPa
 		if err := tx.QueryRow(ctx, `
 			select returned_quantity
 			from partner_order_items
-			where firm_id = $1 and order_id = $2 and id = $3
+			where firm_id = $1::bigint and order_id = $2 and id = $3
 			for update
 		`, firmID, orderID, line.OrderItemID).Scan(&currentReturned); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -6235,7 +6224,7 @@ func (s *Store) VoidPartnerOrderReturn(firmID, orderID, returnID string) (VoidPa
 		if _, err := tx.Exec(ctx, `
 			update partner_order_items
 			set returned_quantity = returned_quantity - $4
-			where firm_id = $1 and order_id = $2 and id = $3
+			where firm_id = $1::bigint and order_id = $2 and id = $3
 		`, firmID, orderID, line.OrderItemID, line.AcceptedQuantity); err != nil {
 			return VoidPartnerOrderReturnResponse{}, err
 		}
@@ -6245,7 +6234,7 @@ func (s *Store) VoidPartnerOrderReturn(firmID, orderID, returnID string) (VoidPa
 		update partner_sales_returns
 		set status = 'CANCELLED',
 		    cancelled_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, returnID); err != nil {
 		return VoidPartnerOrderReturnResponse{}, err
 	}
@@ -6254,7 +6243,7 @@ func (s *Store) VoidPartnerOrderReturn(firmID, orderID, returnID string) (VoidPa
 		set status = 'CANCELLED',
 		    cancelled_at = now(),
 		    updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, salesReturn.CreditNoteID); err != nil {
 		return VoidPartnerOrderReturnResponse{}, err
 	}
@@ -6274,7 +6263,7 @@ func (s *Store) VoidPartnerOrderReturn(firmID, orderID, returnID string) (VoidPa
 		update partner_orders
 		set status = $3,
 		    updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, orderID, nextStatus); err != nil {
 		return VoidPartnerOrderReturnResponse{}, err
 	}
@@ -6357,7 +6346,7 @@ func (s *Store) cancelPartnerOrderTx(ctx context.Context, tx pgx.Tx, firmID, ord
 			update partner_order_items
 			set returned_quantity = $3,
 			    cancelled_quantity = quantity
-			where firm_id = $1 and order_id = $2 and item_id = $4
+			where firm_id = $1::bigint and order_id = $2 and item_id = $4
 		`, firmID, orderID, line.ReturnedQuantity, line.ItemID); err != nil {
 			return err
 		}
@@ -6384,19 +6373,19 @@ func (s *Store) revertConfirmedPartnerOrderToDraftTx(ctx context.Context, tx pgx
 	}
 	if _, err := tx.Exec(ctx, `
 		delete from partner_order_items
-		where firm_id = $1 and order_id = $2
+		where firm_id = $1::bigint and order_id = $2
 	`, firmID, orderID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `
 		delete from partner_order_billable_lines
-		where firm_id = $1 and order_id = $2
+		where firm_id = $1::bigint and order_id = $2
 	`, firmID, orderID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `
 		delete from partner_unfulfilled_order_items
-		where firm_id = $1 and source_order_id = $2
+		where firm_id = $1::bigint and source_order_id = $2
 	`, firmID, orderID); err != nil {
 		return err
 	}
@@ -6407,7 +6396,7 @@ func (s *Store) cancelDraftPartnerOrderInvoicesTx(ctx context.Context, tx pgx.Tx
 	rows, err := tx.Query(ctx, `
 		select id, status
 		from partner_invoices
-		where firm_id = $1 and order_id = $2 and status <> 'CANCELLED'
+		where firm_id = $1::bigint and order_id = $2 and status <> 'CANCELLED'
 		for update
 	`, firmID, orderID)
 	if err != nil {
@@ -6440,7 +6429,7 @@ func (s *Store) cancelDraftPartnerOrderInvoicesTx(ctx context.Context, tx pgx.Tx
 			update partner_invoices
 			set status = 'CANCELLED',
 			    updated_at = now()
-			where firm_id = $1 and id = $2
+			where firm_id = $1::bigint and id = $2
 		`, firmID, invoice.ID); err != nil {
 			return err
 		}
@@ -6463,7 +6452,7 @@ func (s *Store) applyPartnerOrderInventoryDeltaTx(ctx context.Context, tx pgx.Tx
 	rows, err := tx.Query(ctx, `
 		select item_id, quantity
 		from partner_firm_inventory_items
-		where firm_id = $1
+		where firm_id = $1::bigint
 		  and (item_id = $2 or catalog_item_id = $2)
 		order by
 		  case when item_id = $2 then 0 else 1 end,
@@ -6533,7 +6522,7 @@ func (s *Store) updatePartnerInventoryQuantityTx(ctx context.Context, tx pgx.Tx,
 		update partner_firm_inventory_items
 		set quantity = $3,
 		    updated_at = now()
-		where firm_id = $1 and item_id = $2
+		where firm_id = $1::bigint and item_id = $2
 	`, firmID, itemID, nextQty); err != nil {
 		return err
 	}
@@ -6567,7 +6556,7 @@ func (s *Store) GetPartnerInvoices(firmID string) ([]PartnerInvoice, error) {
 		join partner_client_businesses b on b.id = i.client_business_id and b.firm_id = i.firm_id
 		join partner_client_outlets o on o.id = i.client_outlet_id and o.client_business_id = i.client_business_id and o.firm_id = i.firm_id
 		left join users u on u.id = i.created_by
-		where i.firm_id = $1
+		where i.firm_id = $1::bigint
 		order by i.invoice_date desc, i.created_at desc
 	`, firmID)
 	if err != nil {
@@ -6612,7 +6601,7 @@ func (s *Store) GetPartnerInvoices(firmID string) ([]PartnerInvoice, error) {
 		       cgst_amount::float8, sgst_amount::float8, igst_amount::float8, total_tax_amount::float8,
 		       line_total::float8
 		from partner_invoice_items
-		where firm_id = $1
+		where firm_id = $1::bigint
 		order by created_at asc
 	`, firmID)
 	if err != nil {
@@ -6797,7 +6786,7 @@ func (s *Store) partnerInvoiceFinancialAdjustments(ctx context.Context, firmID s
 	rows, err := s.pool.Query(ctx, `
 		select invoice_id, coalesce(sum(amount), 0)::float8
 		from partner_payment_allocations
-		where firm_id = $1
+		where firm_id = $1::bigint
 		group by invoice_id
 	`, firmID)
 	if err != nil {
@@ -6820,7 +6809,7 @@ func (s *Store) partnerInvoiceFinancialAdjustments(ctx context.Context, firmID s
 	rows, err = s.pool.Query(ctx, `
 		select related_invoice_id, coalesce(sum(total_amount), 0)::float8
 		from partner_credit_notes
-		where firm_id = $1 and status = 'ISSUED' and related_invoice_id is not null
+		where firm_id = $1::bigint and status = 'ISSUED' and related_invoice_id is not null
 		group by related_invoice_id
 	`, firmID)
 	if err != nil {
@@ -6843,7 +6832,7 @@ func (s *Store) partnerInvoiceFinancialAdjustments(ctx context.Context, firmID s
 	rows, err = s.pool.Query(ctx, `
 		select related_invoice_id, coalesce(sum(total_amount), 0)::float8
 		from partner_debit_notes
-		where firm_id = $1 and status = 'ISSUED' and related_invoice_id is not null
+		where firm_id = $1::bigint and status = 'ISSUED' and related_invoice_id is not null
 		group by related_invoice_id
 	`, firmID)
 	if err != nil {
@@ -6887,7 +6876,7 @@ func (s *Store) insertPartnerClientLedgerEntryTx(
 		select exists(
 			select 1
 			from partner_client_ledger_entries
-			where firm_id = $1 and reference_id = $2 and entry_type = $3
+			where firm_id = $1::bigint and reference_id = $2 and entry_type = $3
 		)
 	`, firmID, referenceID, entryType).Scan(&exists); err != nil {
 		return err
@@ -6900,7 +6889,7 @@ func (s *Store) insertPartnerClientLedgerEntryTx(
 		select coalesce((
 			select running_balance
 			from partner_client_ledger_entries
-			where firm_id = $1 and client_business_id = $2
+			where firm_id = $1::bigint and client_business_id = $2
 			order by entry_date desc, created_at desc
 			limit 1
 		), 0)::float8
@@ -6981,7 +6970,7 @@ func (s *Store) CreatePartnerInvoice(firmID string, input CreatePartnerInvoiceIn
 			o.client_business_id,
 			o.client_outlet_id
 		from partner_orders o
-		where o.firm_id = $1 and o.id = $2
+		where o.firm_id = $1::bigint and o.id = $2
 	`, firmID, orderID).Scan(&existingInvoiceID, &orderStatus, &clientBusinessID, &clientOutletID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return PartnerInvoice{}, fmt.Errorf("order not found")
@@ -7077,7 +7066,7 @@ func (s *Store) CreatePartnerInvoice(firmID string, input CreatePartnerInvoiceIn
 		join partner_product_catalog pc on pc.id = bl.catalog_item_id
 		left join partner_order_items oi
 			on oi.firm_id = bl.firm_id and oi.order_id = bl.order_id and oi.billable_line_id = bl.id
-		where bl.firm_id = $1 and bl.order_id = $2
+		where bl.firm_id = $1::bigint and bl.order_id = $2
 		group by bl.id, bl.catalog_item_id, bl.item_code, bl.item_name, pc.sku, pc.hsn_code, pc.unit, pc.gst_percentage, bl.quantity, bl.mrp, bl.seller_margin_percentage, bl.rate, bl.created_at
 		order by bl.created_at asc
 	`, firmID, orderID, orderStatus)
@@ -7189,7 +7178,7 @@ func (s *Store) ensurePartnerOrderInvoiceTx(ctx context.Context, tx pgx.Tx, firm
 	err := tx.QueryRow(ctx, `
 		select id, invoice_number, status
 		from partner_invoices
-		where firm_id = $1 and order_id = $2 and status <> 'CANCELLED'
+		where firm_id = $1::bigint and order_id = $2 and status <> 'CANCELLED'
 		order by created_at desc
 		limit 1
 		for update
@@ -7206,7 +7195,7 @@ func (s *Store) ensurePartnerOrderInvoiceTx(ctx context.Context, tx pgx.Tx, firm
 				    invoice_date = case when $3 = 'FINALIZED' then $4::date else invoice_date end,
 				    due_date = case when $3 = 'FINALIZED' then $5::date else due_date end,
 				    updated_at = now()
-				where firm_id = $1 and id = $2
+				where firm_id = $1::bigint and id = $2
 			`, firmID, invoiceID, targetStatus, invoiceDate, dueDate); err != nil {
 				return "", "", err
 			}
@@ -7240,7 +7229,7 @@ func (s *Store) ensurePartnerOrderInvoiceTx(ctx context.Context, tx pgx.Tx, firm
 	if err := tx.QueryRow(ctx, `
 		select client_business_id, client_outlet_id
 		from partner_orders
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 		for update
 	`, firmID, orderID).Scan(&clientBusinessID, &clientOutletID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -7333,13 +7322,13 @@ func (s *Store) syncPartnerOrderInvoiceItemsTx(ctx context.Context, tx pgx.Tx, f
 	if err := tx.QueryRow(ctx, `
 		select coalesce(firm_state, ''), coalesce(place_of_supply, '')
 		from partner_invoices
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, invoiceID).Scan(&sellerState, &placeOfSupply); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `
 		delete from partner_invoice_items
-		where firm_id = $1 and invoice_id = $2
+		where firm_id = $1::bigint and invoice_id = $2
 	`, firmID, invoiceID); err != nil {
 		return err
 	}
@@ -7359,7 +7348,7 @@ func (s *Store) syncPartnerOrderInvoiceItemsTx(ctx context.Context, tx pgx.Tx, f
 		join partner_product_catalog pc on pc.id = bl.catalog_item_id
 		left join partner_order_items oi
 			on oi.firm_id = bl.firm_id and oi.order_id = bl.order_id and oi.billable_line_id = bl.id
-		where bl.firm_id = $1 and bl.order_id = $2
+		where bl.firm_id = $1::bigint and bl.order_id = $2
 		group by bl.id, bl.catalog_item_id, bl.item_code, bl.item_name, pc.sku, pc.hsn_code, pc.unit, pc.gst_percentage, bl.quantity, bl.mrp, bl.seller_margin_percentage, bl.rate, bl.created_at
 		order by bl.created_at asc
 	`, firmID, orderID, orderStatus)
@@ -7422,7 +7411,7 @@ func (s *Store) syncPartnerOrderInvoiceItemsTx(ctx context.Context, tx pgx.Tx, f
 		    additional_charges_amount = $11,
 		    final_total_amount = $3,
 		    updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, invoiceID, totals.FinalTotal, totals.Subtotal, totals.Discount, totals.Taxable, totals.CGST, totals.SGST, totals.IGST, totals.RoundOff, totals.Additional)
 	return err
 }
@@ -7453,7 +7442,7 @@ func (s *Store) FinalizePartnerInvoice(firmID, invoiceID string) (PartnerInvoice
 	if err := tx.QueryRow(ctx, `
 		select status, coalesce(order_id, ''), client_business_id, invoice_number, invoice_date::text, amount::float8
 		from partner_invoices
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 		for update
 	`, firmID, invoiceID).Scan(&currentStatus, &orderID, &clientBusinessID, &invoiceNumber, &invoiceDate, &amount); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -7475,7 +7464,7 @@ func (s *Store) FinalizePartnerInvoice(firmID, invoiceID string) (PartnerInvoice
 		if err := tx.QueryRow(ctx, `
 			select status
 			from partner_orders
-			where firm_id = $1 and id = $2
+			where firm_id = $1::bigint and id = $2
 		`, firmID, orderID).Scan(&orderStatus); err != nil {
 			return PartnerInvoice{}, err
 		}
@@ -7490,7 +7479,7 @@ func (s *Store) FinalizePartnerInvoice(firmID, invoiceID string) (PartnerInvoice
 		update partner_invoices
 		set status = 'FINALIZED',
 		    updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, invoiceID); err != nil {
 		return PartnerInvoice{}, err
 	}
@@ -7528,7 +7517,7 @@ func (s *Store) CancelPartnerInvoice(firmID, invoiceID string) (PartnerInvoice, 
 	if _, err := s.pool.Exec(ctx, `
 		update partner_invoices
 		set status = 'CANCELLED', updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, invoiceID); err != nil {
 		return PartnerInvoice{}, err
 	}
@@ -7551,7 +7540,7 @@ func (s *Store) GetPartnerPurchases(firmID string) ([]PartnerPurchase, error) {
 		left join users cu on cu.id = p.created_by
 		left join users ou on ou.id = p.ordered_by
 		left join users pu on pu.id = p.posted_by
-		where p.firm_id = $1
+		where p.firm_id = $1::bigint
 		order by p.purchase_date desc, p.created_at desc
 	`, firmID)
 	if err != nil {
@@ -7588,7 +7577,7 @@ func (s *Store) GetPartnerPurchases(firmID string) ([]PartnerPurchase, error) {
 		       coalesce(received_quantity, 0), coalesce(damaged_quantity, 0), cost_price::float8,
 		       discount_percentage::float8, tax_percentage::float8, line_total::float8
 		from partner_purchase_items
-		where firm_id = $1
+		where firm_id = $1::bigint
 		order by created_at asc
 	`, firmID)
 	if err != nil {
@@ -7639,7 +7628,7 @@ func (s *Store) GetPartnerGoodsReceipts(firmID, purchaseID string) ([]PartnerGoo
 		from partner_goods_receipts g
 		join partner_suppliers s on s.firm_id = g.firm_id and s.id = g.supplier_id
 		left join users u on u.id = g.created_by
-		where g.firm_id = $1 and g.purchase_id = $2
+		where g.firm_id = $1::bigint and g.purchase_id = $2
 		order by g.received_date desc, g.created_at desc
 	`, firmID, purchaseID)
 	if err != nil {
@@ -7671,7 +7660,7 @@ func (s *Store) GetPartnerGoodsReceipts(firmID, purchaseID string) ([]PartnerGoo
 		       gi.ordered_quantity, gi.received_quantity, gi.damaged_quantity, coalesce(gi.notes, '')
 		from partner_goods_receipt_items gi
 		left join partner_purchase_items pi on pi.firm_id = gi.firm_id and pi.id = gi.purchase_item_id
-		where gi.firm_id = $1
+		where gi.firm_id = $1::bigint
 		  and gi.grn_id = any($2)
 		order by gi.created_at asc
 	`, firmID, goodsReceiptIDs(items))
@@ -7722,7 +7711,7 @@ func (s *Store) CreatePartnerPurchase(firmID string, input CreatePartnerPurchase
 	if err := tx.QueryRow(ctx, `
 		select status
 		from partner_suppliers
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, strings.TrimSpace(input.SupplierID)).Scan(&supplierStatus); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return PartnerPurchase{}, fmt.Errorf("supplier not found")
@@ -7751,7 +7740,7 @@ func (s *Store) CreatePartnerPurchase(firmID string, input CreatePartnerPurchase
 			select i.item_id, c.sku, c.name, c.sku
 			from partner_firm_inventory_items i
 			join partner_product_catalog c on c.id = i.catalog_item_id
-			where i.firm_id = $1 and i.item_id = $2
+			where i.firm_id = $1::bigint and i.item_id = $2
 		`, firmID, strings.TrimSpace(line.ItemID)).Scan(&itemID, &itemCode, &itemName, &sku)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -7789,7 +7778,7 @@ func (s *Store) OrderPartnerPurchase(firmID, purchaseID string) (PartnerPurchase
 	if _, err := s.pool.Exec(ctx, `
 		update partner_purchases
 		set status = 'ORDERED', ordered_at = now(), ordered_by = $3, updated_at = now()
-		where firm_id = $1 and id = $2 and status = 'DRAFT'
+		where firm_id = $1::bigint and id = $2 and status = 'DRAFT'
 	`, firmID, purchaseID, s.currentUserID); err != nil {
 		return PartnerPurchase{}, err
 	}
@@ -7880,7 +7869,7 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 			update partner_purchase_items
 			set received_quantity = received_quantity + $4,
 			    damaged_quantity = damaged_quantity + $5
-			where firm_id = $1 and purchase_id = $2 and id = $3
+			where firm_id = $1::bigint and purchase_id = $2 and id = $3
 		`, firmID, purchaseID, line.ID, receiptLine.ReceivedQuantity, receiptLine.DamagedQuantity); err != nil {
 			return PartnerPurchase{}, err
 		}
@@ -7892,7 +7881,7 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 			update partner_firm_inventory_items
 			set quantity = quantity + $3,
 			    updated_at = now()
-			where firm_id = $1 and item_id = $2
+			where firm_id = $1::bigint and item_id = $2
 		`, firmID, line.ItemID, receiptLine.ReceivedQuantity); err != nil {
 			return PartnerPurchase{}, err
 		}
@@ -7921,7 +7910,7 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 		select coalesce(sum(quantity), 0)::int,
 		       coalesce(sum(received_quantity + damaged_quantity), 0)::int
 		from partner_purchase_items
-		where firm_id = $1 and purchase_id = $2
+		where firm_id = $1::bigint and purchase_id = $2
 	`, firmID, purchaseID).Scan(&totalOrdered, &totalAccounted); err != nil {
 		return PartnerPurchase{}, err
 	}
@@ -7935,7 +7924,7 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 		    posted_at = case when $3 = 'RECEIVED' then coalesce(posted_at, now()) else posted_at end,
 		    posted_by = case when $3 = 'RECEIVED' then coalesce(posted_by, $4) else posted_by end,
 		    updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, purchaseID, nextStatus, s.currentUserID); err != nil {
 		return PartnerPurchase{}, err
 	}
@@ -7965,7 +7954,7 @@ func (s *Store) CancelPartnerPurchase(firmID, purchaseID string) (PartnerPurchas
 	if _, err := s.pool.Exec(ctx, `
 		update partner_purchases
 		set status = 'CANCELLED', cancelled_at = now(), updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, purchaseID); err != nil {
 		return PartnerPurchase{}, err
 	}
@@ -7979,7 +7968,7 @@ func (s *Store) GetPartnerStockLedger(firmID, itemID string, filters PartnerStoc
 		select id, firm_id, item_id, quantity_delta, reason_type, coalesce(reference_type, ''), coalesce(reference_id, ''), coalesce(note, ''),
 		       to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), coalesce(unit_cost::float8, 0)
 		from partner_stock_entries
-		where firm_id = $1 and item_id = $2
+		where firm_id = $1::bigint and item_id = $2
 		  and ($3 = '' or reason_type = $3)
 		  and ($4 = '' or coalesce(reference_type, '') = $4)
 		  and ($5 = '' or created_at::date >= $5::date)
@@ -8011,7 +8000,7 @@ func (s *Store) GetPartnerStockLedgerByReference(firmID, referenceType, referenc
 		select id, firm_id, item_id, quantity_delta, reason_type, coalesce(reference_type, ''), coalesce(reference_id, ''), coalesce(note, ''),
 		       to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), coalesce(unit_cost::float8, 0)
 		from partner_stock_entries
-		where firm_id = $1 and reference_type = $2 and reference_id = $3
+		where firm_id = $1::bigint and reference_type = $2 and reference_id = $3
 		order by created_at desc
 	`, firmID, strings.TrimSpace(referenceType), strings.TrimSpace(referenceID))
 	if err != nil {
@@ -8163,13 +8152,13 @@ func (s *Store) GetPartnerPayments(firmID string, filters GetPartnerPaymentsInpu
 			p.id, p.firm_id, coalesce(p.reference_number, p.id), p.client_business_id, b.business_name,
 			p.payment_date::text, p.payment_mode, coalesce(p.reference_number, ''), 'ACTIVE',
 			to_char(p.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-			coalesce(u.name, ''), coalesce(p.collected_by, ''), coalesce(cu.name, ''),
+			coalesce(u.name, ''), coalesce(p.collected_by::text, ''), coalesce(cu.name, ''),
 			p.amount::float8, coalesce(p.notes, '')
 		from partner_payments p
 		join partner_client_businesses b on b.firm_id = p.firm_id and b.id = p.client_business_id
 		left join users u on u.id = p.created_by
 		left join users cu on cu.id = p.collected_by
-		where p.firm_id = $1
+		where p.firm_id = $1::bigint
 		  and ($2 = '' or p.client_business_id = $2)
 		  and ($3 = '' or p.payment_date >= $3::date)
 		  and ($4 = '' or p.payment_date <= $4::date)
@@ -8206,7 +8195,7 @@ func (s *Store) GetPartnerPayments(firmID string, filters GetPartnerPaymentsInpu
 		select pa.id, pa.payment_id, pa.invoice_id, i.invoice_number, i.invoice_date::text, i.amount::float8, pa.amount::float8
 		from partner_payment_allocations pa
 		join partner_invoices i on i.firm_id = pa.firm_id and i.id = pa.invoice_id
-		where pa.firm_id = $1
+		where pa.firm_id = $1::bigint
 		order by pa.created_at asc
 	`, firmID)
 	if err != nil {
@@ -8268,7 +8257,7 @@ func (s *Store) CreatePartnerPayment(firmID string, input CreatePartnerPaymentIn
 	if err := tx.QueryRow(ctx, `
 		select client_business_id, invoice_number, invoice_date::text, status, amount::float8
 		from partner_invoices
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 		for update
 	`, firmID, invoiceID).Scan(&clientBusinessID, &invoiceNumber, &invoiceDate, &status, &invoiceAmount); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -8280,13 +8269,13 @@ func (s *Store) CreatePartnerPayment(firmID string, input CreatePartnerPaymentIn
 		return PartnerPayment{}, fmt.Errorf("payments can only be recorded against finalized invoices")
 	}
 	var paid, credits, debits float64
-	if err := tx.QueryRow(ctx, `select coalesce(sum(amount), 0)::float8 from partner_payment_allocations where firm_id = $1 and invoice_id = $2`, firmID, invoiceID).Scan(&paid); err != nil {
+	if err := tx.QueryRow(ctx, `select coalesce(sum(amount), 0)::float8 from partner_payment_allocations where firm_id = $1::bigint and invoice_id = $2`, firmID, invoiceID).Scan(&paid); err != nil {
 		return PartnerPayment{}, err
 	}
-	if err := tx.QueryRow(ctx, `select coalesce(sum(total_amount), 0)::float8 from partner_credit_notes where firm_id = $1 and related_invoice_id = $2 and status = 'ISSUED'`, firmID, invoiceID).Scan(&credits); err != nil {
+	if err := tx.QueryRow(ctx, `select coalesce(sum(total_amount), 0)::float8 from partner_credit_notes where firm_id = $1::bigint and related_invoice_id = $2 and status = 'ISSUED'`, firmID, invoiceID).Scan(&credits); err != nil {
 		return PartnerPayment{}, err
 	}
-	if err := tx.QueryRow(ctx, `select coalesce(sum(total_amount), 0)::float8 from partner_debit_notes where firm_id = $1 and related_invoice_id = $2 and status = 'ISSUED'`, firmID, invoiceID).Scan(&debits); err != nil {
+	if err := tx.QueryRow(ctx, `select coalesce(sum(total_amount), 0)::float8 from partner_debit_notes where firm_id = $1::bigint and related_invoice_id = $2 and status = 'ISSUED'`, firmID, invoiceID).Scan(&debits); err != nil {
 		return PartnerPayment{}, err
 	}
 	outstanding := math.Max(roundCurrency(invoiceAmount-credits+debits-paid), 0)
@@ -8357,7 +8346,7 @@ func (s *Store) GetPartnerClientLedger(firmID string, filters GetPartnerClientLe
 			to_char(e.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		from partner_client_ledger_entries e
 		join partner_client_businesses b on b.firm_id = e.firm_id and b.id = e.client_business_id
-		where e.firm_id = $1
+		where e.firm_id = $1::bigint
 		  and ($2 = '' or e.client_business_id = $2)
 		  and ($3 = '' or e.entry_date >= $3::date)
 		  and ($4 = '' or e.entry_date <= $4::date)
@@ -8396,7 +8385,7 @@ func (s *Store) GetPartnerCreditNotes(firmID string) ([]PartnerCreditNote, error
 		join partner_client_outlets o on o.id = n.client_outlet_id and o.client_business_id = n.client_business_id and o.firm_id = n.firm_id
 		left join partner_invoices i on i.id = n.related_invoice_id and i.firm_id = n.firm_id
 		left join users u on u.id = n.created_by
-		where n.firm_id = $1
+		where n.firm_id = $1::bigint
 		order by n.credit_date desc, n.created_at desc
 	`, firmID)
 	if err != nil {
@@ -8422,7 +8411,7 @@ func (s *Store) GetPartnerCreditNotes(firmID string) ([]PartnerCreditNote, error
 	lineRows, err := s.pool.Query(ctx, `
 		select id, credit_note_id, coalesce(item_id, ''), coalesce(item_name, ''), coalesce(quantity, 0), amount::float8, coalesce(reference_invoice_line_id, '')
 		from partner_credit_note_lines
-		where firm_id = $1
+		where firm_id = $1::bigint
 		order by created_at asc
 	`, firmID)
 	if err != nil {
@@ -8460,7 +8449,7 @@ func (s *Store) CreatePartnerCreditNote(firmID string, input CreatePartnerCredit
 	if err := tx.QueryRow(ctx, `
 		select 'CN-' || lpad((coalesce(count(*), 0) + 1001)::text, 4, '0')
 		from partner_credit_notes
-		where firm_id = $1
+		where firm_id = $1::bigint
 	`, firmID).Scan(&noteNumber); err != nil {
 		return PartnerCreditNote{}, err
 	}
@@ -8477,7 +8466,7 @@ func (s *Store) CreatePartnerCreditNote(firmID string, input CreatePartnerCredit
 		if err := tx.QueryRow(ctx, `
 			select status, client_business_id, client_outlet_id, amount::float8
 			from partner_invoices
-			where firm_id = $1 and id = $2
+			where firm_id = $1::bigint and id = $2
 			for update
 		`, firmID, invoiceID).Scan(&invoiceStatus, &invoiceClientBusinessID, &invoiceClientOutletID, &invoiceAmount); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -8491,10 +8480,10 @@ func (s *Store) CreatePartnerCreditNote(firmID string, input CreatePartnerCredit
 		if invoiceClientBusinessID != strings.TrimSpace(input.ClientBusinessID) || invoiceClientOutletID != strings.TrimSpace(input.ClientOutletID) {
 			return PartnerCreditNote{}, fmt.Errorf("credit note client must match the related invoice")
 		}
-		if err := tx.QueryRow(ctx, `select coalesce(sum(total_amount), 0)::float8 from partner_credit_notes where firm_id = $1 and related_invoice_id = $2 and status = 'ISSUED'`, firmID, invoiceID).Scan(&existingCredits); err != nil {
+		if err := tx.QueryRow(ctx, `select coalesce(sum(total_amount), 0)::float8 from partner_credit_notes where firm_id = $1::bigint and related_invoice_id = $2 and status = 'ISSUED'`, firmID, invoiceID).Scan(&existingCredits); err != nil {
 			return PartnerCreditNote{}, err
 		}
-		if err := tx.QueryRow(ctx, `select coalesce(sum(total_amount), 0)::float8 from partner_debit_notes where firm_id = $1 and related_invoice_id = $2 and status = 'ISSUED'`, firmID, invoiceID).Scan(&existingDebits); err != nil {
+		if err := tx.QueryRow(ctx, `select coalesce(sum(total_amount), 0)::float8 from partner_debit_notes where firm_id = $1::bigint and related_invoice_id = $2 and status = 'ISSUED'`, firmID, invoiceID).Scan(&existingDebits); err != nil {
 			return PartnerCreditNote{}, err
 		}
 		if status == "ISSUED" && roundCurrency(total) > math.Max(roundCurrency(invoiceAmount-existingCredits+existingDebits), 0) {
@@ -8515,7 +8504,7 @@ func (s *Store) CreatePartnerCreditNote(firmID string, input CreatePartnerCredit
 				select c.name
 				from partner_firm_inventory_items i
 				join partner_product_catalog c on c.id = i.catalog_item_id
-				where i.firm_id = $1 and i.item_id = $2
+				where i.firm_id = $1::bigint and i.item_id = $2
 			`, firmID, strings.TrimSpace(line.ItemID)).Scan(&itemName); err != nil {
 				return PartnerCreditNote{}, err
 			}
@@ -8576,7 +8565,7 @@ func (s *Store) GetPartnerDebitNotes(firmID string) ([]PartnerDebitNote, error) 
 		join partner_client_outlets o on o.id = n.client_outlet_id and o.client_business_id = n.client_business_id and o.firm_id = n.firm_id
 		left join partner_invoices i on i.id = n.related_invoice_id and i.firm_id = n.firm_id
 		left join users u on u.id = n.created_by
-		where n.firm_id = $1
+		where n.firm_id = $1::bigint
 		order by n.debit_date desc, n.created_at desc
 	`, firmID)
 	if err != nil {
@@ -8601,7 +8590,7 @@ func (s *Store) GetPartnerDebitNotes(firmID string) ([]PartnerDebitNote, error) 
 	lineRows, err := s.pool.Query(ctx, `
 		select id, debit_note_id, coalesce(item_id, ''), coalesce(item_name, ''), description, amount::float8
 		from partner_debit_note_lines
-		where firm_id = $1
+		where firm_id = $1::bigint
 		order by created_at asc
 	`, firmID)
 	if err != nil {
@@ -8639,7 +8628,7 @@ func (s *Store) CreatePartnerDebitNote(firmID string, input CreatePartnerDebitNo
 	if err := tx.QueryRow(ctx, `
 		select 'DN-' || lpad((coalesce(count(*), 0) + 1001)::text, 4, '0')
 		from partner_debit_notes
-		where firm_id = $1
+		where firm_id = $1::bigint
 	`, firmID).Scan(&noteNumber); err != nil {
 		return PartnerDebitNote{}, err
 	}
@@ -8655,7 +8644,7 @@ func (s *Store) CreatePartnerDebitNote(firmID string, input CreatePartnerDebitNo
 		if err := tx.QueryRow(ctx, `
 			select status, client_business_id, client_outlet_id
 			from partner_invoices
-			where firm_id = $1 and id = $2
+			where firm_id = $1::bigint and id = $2
 			for update
 		`, firmID, invoiceID).Scan(&invoiceStatus, &invoiceClientBusinessID, &invoiceClientOutletID); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -8684,7 +8673,7 @@ func (s *Store) CreatePartnerDebitNote(firmID string, input CreatePartnerDebitNo
 				select c.name
 				from partner_firm_inventory_items i
 				join partner_product_catalog c on c.id = i.catalog_item_id
-				where i.firm_id = $1 and i.item_id = $2
+				where i.firm_id = $1::bigint and i.item_id = $2
 			`, firmID, strings.TrimSpace(line.ItemID)).Scan(&itemName)
 		}
 		if _, err := tx.Exec(ctx, `
@@ -8729,11 +8718,11 @@ func (s *Store) GetPartnerAuditLogs(firmID string, filters GetPartnerAuditLogsIn
 		       to_char(l.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		from partner_audit_logs l
 		left join users u on u.id = l.user_id
-		where l.firm_id = $1
+		where l.firm_id = $1::bigint
 		  and ($2 = '' or l.entity_type = $2)
 		  and ($3 = '' or l.created_at::date >= $3::date)
 		  and ($4 = '' or l.created_at::date <= $4::date)
-		  and ($5 = '' or l.user_id = $5)
+		  and ($5 = '' or l.user_id = $5::bigint)
 		order by l.created_at desc
 	`, firmID, strings.TrimSpace(filters.EntityType), strings.TrimSpace(filters.FromDate), strings.TrimSpace(filters.ToDate), strings.TrimSpace(filters.UserID))
 	if err != nil {
@@ -8763,17 +8752,17 @@ func (s *Store) GetPartnerGlobalSearch(firmID, query string) ([]PartnerGlobalSea
 				select b.id, 'CLIENT' as type, b.business_name as title, coalesce(b.billing_address, '') as subtitle,
 				       '/partners/clients' as href
 				from partner_client_businesses b
-				where b.firm_id = $1 and lower(b.business_name) like $2
+				where b.firm_id = $1::bigint and lower(b.business_name) like $2
 				union all
 				select o.id, 'ORDER', o.order_number, coalesce(b.business_name, ''), '/partners/orders/' || o.id
 				from partner_orders o
 			left join partner_client_businesses b on b.id = o.client_business_id and b.firm_id = o.firm_id
-			where o.firm_id = $1 and (lower(o.order_number) like $2 or lower(coalesce(b.business_name, '')) like $2)
+			where o.firm_id = $1::bigint and (lower(o.order_number) like $2 or lower(coalesce(b.business_name, '')) like $2)
 			union all
 			select bi.id, 'ITEM', bi.name, coalesce(br.name, ''), '/partners/items'
 			from partner_product_catalog bi
 			join partner_brands br on br.id = bi.brand_id
-			join partner_firm_brands fb on fb.brand_id = bi.brand_id and fb.firm_id = $1
+			join partner_firm_brands fb on fb.brand_id = bi.brand_id and fb.firm_id = $1::bigint
 			where lower(bi.name) like $2 or lower(coalesce(bi.sku, '')) like $2
 		) q
 		limit 10
@@ -8861,7 +8850,7 @@ func (s *Store) GetPartnerStockMovementReport(firmID string, filters GetPartnerS
 		join partner_brands b on b.id = c.brand_id
 		join partner_firm_brands fb on fb.brand_id = c.brand_id and fb.firm_id = i.firm_id
 		left join partner_stock_entries se on se.firm_id = i.firm_id and se.item_id = i.item_id
-		where i.firm_id = $1
+		where i.firm_id = $1::bigint
 		  and ($4 = '' or b.id = $4)
 		  and ($5 = '' or i.item_id = $5)
 		group by i.item_id, c.name, b.id, b.name
@@ -8929,11 +8918,7 @@ func (s *Store) CreatePartnerStockAction(firmID string, input CreatePartnerStock
 
 	switch actionType {
 	case "PURCHASE_INWARD":
-		reasonType = "PURCHASE"
-		referenceType = firstNonEmpty(strings.TrimSpace(input.ReferenceType), "PURCHASE")
-		if strings.TrimSpace(input.PurchaseID) != "" {
-			referenceID = strings.TrimSpace(input.PurchaseID)
-		}
+		return PartnerStockLedgerEntry{}, fmt.Errorf("purchase inward must be received through purchases and GRNs")
 	case "RETURN_IN":
 		reasonType = "RETURN_IN"
 		referenceType = firstNonEmpty(strings.TrimSpace(input.ReferenceType), "RETURN")
@@ -8993,7 +8978,7 @@ func (s *Store) CreatePartnerStockAction(firmID string, input CreatePartnerStock
 	if err := tx.QueryRow(ctx, `
 		select quantity
 		from partner_firm_inventory_items
-		where firm_id = $1 and item_id = $2
+		where firm_id = $1::bigint and item_id = $2
 		for update
 	`, firmID, input.ItemID).Scan(&currentQty); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -9006,7 +8991,7 @@ func (s *Store) CreatePartnerStockAction(firmID string, input CreatePartnerStock
 	}
 	if strings.TrimSpace(input.SupplierID) != "" {
 		var supplierStatus string
-		if err := tx.QueryRow(ctx, `select status from partner_suppliers where firm_id = $1 and id = $2`, firmID, strings.TrimSpace(input.SupplierID)).Scan(&supplierStatus); err != nil {
+		if err := tx.QueryRow(ctx, `select status from partner_suppliers where firm_id = $1::bigint and id = $2`, firmID, strings.TrimSpace(input.SupplierID)).Scan(&supplierStatus); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return PartnerStockLedgerEntry{}, fmt.Errorf("supplier not found")
 			}
@@ -9022,7 +9007,7 @@ func (s *Store) CreatePartnerStockAction(firmID string, input CreatePartnerStock
 			select exists(
 				select 1
 				from partner_client_businesses
-				where firm_id = $1 and id = $2
+				where firm_id = $1::bigint and id = $2
 			)
 		`, firmID, strings.TrimSpace(input.ClientBusinessID)).Scan(&exists); err != nil {
 			return PartnerStockLedgerEntry{}, err
@@ -9036,7 +9021,7 @@ func (s *Store) CreatePartnerStockAction(firmID string, input CreatePartnerStock
 		update partner_firm_inventory_items
 		set quantity = quantity + $3,
 		    updated_at = now()
-		where firm_id = $1 and item_id = $2
+		where firm_id = $1::bigint and item_id = $2
 	`, firmID, input.ItemID, quantityDelta); err != nil {
 		return PartnerStockLedgerEntry{}, err
 	}
@@ -9077,7 +9062,18 @@ func (s *Store) CreatePartnerStockAdjustment(firmID string, input CreatePartnerS
 	if strings.TrimSpace(input.ItemID) == "" || input.QuantityDelta == 0 {
 		return PartnerStockLedgerEntry{}, fmt.Errorf("itemId and non-zero quantityDelta are required")
 	}
-	if strings.TrimSpace(input.ReferenceType) == "MANUAL" && strings.TrimSpace(input.Note) == "" {
+	reasonType := strings.ToUpper(strings.TrimSpace(input.ReasonType))
+	if reasonType == "" {
+		reasonType = "ADJUSTMENT"
+	}
+	referenceType := strings.ToUpper(strings.TrimSpace(input.ReferenceType))
+	if referenceType == "" {
+		referenceType = "MANUAL"
+	}
+	if reasonType != "ADJUSTMENT" || referenceType != "MANUAL" {
+		return PartnerStockLedgerEntry{}, fmt.Errorf("inventory adjustments are only for manual corrections; receive supplier stock through purchases and GRNs")
+	}
+	if strings.TrimSpace(input.Note) == "" {
 		return PartnerStockLedgerEntry{}, fmt.Errorf("note is required for manual adjustments")
 	}
 	var currentQty int
@@ -9089,7 +9085,7 @@ func (s *Store) CreatePartnerStockAdjustment(firmID string, input CreatePartnerS
 	if err := tx.QueryRow(ctx, `
 		select quantity
 		from partner_firm_inventory_items
-		where firm_id = $1 and item_id = $2
+		where firm_id = $1::bigint and item_id = $2
 		for update
 	`, firmID, input.ItemID).Scan(&currentQty); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -9104,7 +9100,7 @@ func (s *Store) CreatePartnerStockAdjustment(firmID string, input CreatePartnerS
 		update partner_firm_inventory_items
 		set quantity = quantity + $3,
 		    updated_at = now()
-		where firm_id = $1 and item_id = $2
+		where firm_id = $1::bigint and item_id = $2
 	`, firmID, input.ItemID, input.QuantityDelta); err != nil {
 		return PartnerStockLedgerEntry{}, err
 	}
@@ -9112,14 +9108,14 @@ func (s *Store) CreatePartnerStockAdjustment(firmID string, input CreatePartnerS
 		insert into partner_stock_entries (
 			id, firm_id, item_id, quantity_delta, reason_type, reference_type, reference_id, note, created_by
 		) values ($1, $2, $3, $4, $5, nullif($6, ''), nullif($7, ''), nullif($8, ''), $9)
-	`, nextID("pstock"), firmID, input.ItemID, input.QuantityDelta, strings.TrimSpace(input.ReasonType), strings.TrimSpace(input.ReferenceType), strings.TrimSpace(input.ReferenceID), strings.TrimSpace(input.Note), s.currentUserID); err != nil {
+	`, nextID("pstock"), firmID, input.ItemID, input.QuantityDelta, reasonType, referenceType, strings.TrimSpace(input.ReferenceID), strings.TrimSpace(input.Note), s.currentUserID); err != nil {
 		return PartnerStockLedgerEntry{}, err
 	}
 	if err := s.insertPartnerAuditLogTx(ctx, tx, firmID, "STOCK", input.ItemID, "ADJUSTMENT", nil, map[string]any{
 		"itemId":        input.ItemID,
 		"quantityDelta": input.QuantityDelta,
-		"reasonType":    strings.TrimSpace(input.ReasonType),
-		"referenceType": strings.TrimSpace(input.ReferenceType),
+		"reasonType":    reasonType,
+		"referenceType": referenceType,
 		"referenceId":   strings.TrimSpace(input.ReferenceID),
 		"note":          strings.TrimSpace(input.Note),
 	}); err != nil {
@@ -9148,8 +9144,8 @@ func (s *Store) GetPartnerStock(firmID, brandID string) ([]PartnerStockRow, erro
 		join partner_product_catalog c on c.id = i.catalog_item_id
 		join partner_brands b on b.id = c.brand_id
 		join partner_firm_brands fb on fb.brand_id = b.id and fb.firm_id = i.firm_id
-		where i.firm_id = $1
-		  and ($2 = '' or b.id = $2)
+		where i.firm_id = $1::bigint
+		  and ($2 = '' or b.id = $2::bigint)
 		order by b.name asc, c.name asc, i.mrp asc, i.discount_percentage asc
 	`, firmID, strings.TrimSpace(brandID))
 	if err != nil {
@@ -9203,8 +9199,8 @@ func (s *Store) GetPartnerInventory(firmID, brandID string) ([]PartnerInventoryI
 			limit 1
 		) r on true
 		left join partner_suppliers s on s.id = r.supplier_id and s.firm_id = i.firm_id
-		where i.firm_id = $1
-		  and ($2 = '' or c.brand_id = $2)
+		where i.firm_id = $1::bigint
+		  and ($2 = '' or c.brand_id = $2::bigint)
 		order by c.name asc, i.mrp asc, i.discount_percentage asc
 	`, firmID, strings.TrimSpace(brandID))
 	if err != nil {
@@ -9241,179 +9237,6 @@ func (s *Store) GetPartnerInventory(firmID, brandID string) ([]PartnerInventoryI
 	return ensurePartnerInventoryItems(items), nil
 }
 
-func (s *Store) CreatePartnerInventoryItems(firmID string, inputs []CreatePartnerInventoryItemInput) ([]PartnerInventoryItem, error) {
-	ctx := context.Background()
-	if len(inputs) == 0 {
-		return []PartnerInventoryItem{}, fmt.Errorf("at least one inventory item is required")
-	}
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
-
-	headerSupplierID := strings.TrimSpace(inputs[0].SupplierID)
-	headerNote := strings.TrimSpace(inputs[0].Note)
-	headerReceivedAtRaw := strings.TrimSpace(inputs[0].ReceivedAt)
-	if headerSupplierID == "" {
-		return nil, fmt.Errorf("supplierId is required")
-	}
-	headerReceivedAt := time.Now().UTC()
-	if headerReceivedAtRaw != "" {
-		parsed, err := time.Parse("2006-01-02", headerReceivedAtRaw)
-		if err != nil {
-			return nil, fmt.Errorf("receivedAt must be in YYYY-MM-DD format")
-		}
-		headerReceivedAt = parsed.UTC()
-	}
-
-	var supplierStatus string
-	if err := tx.QueryRow(ctx, `
-		select status
-		from partner_suppliers
-		where firm_id = $1 and id = $2
-	`, firmID, headerSupplierID).Scan(&supplierStatus); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("supplier not found")
-		}
-		return nil, err
-	}
-	if supplierStatus != "ACTIVE" {
-		return nil, fmt.Errorf("supplier must be active")
-	}
-
-	createdIDs := make([]string, 0, len(inputs))
-	createdSet := make(map[string]struct{}, len(inputs))
-	supplyInwardID := nextID("psi")
-	brandID := ""
-	for _, input := range inputs {
-		catalogItemID := strings.TrimSpace(input.CatalogItemID)
-		supplierID := strings.TrimSpace(input.SupplierID)
-		status := strings.ToUpper(strings.TrimSpace(input.Status))
-		receiptNote := strings.TrimSpace(input.Note)
-		if status == "" {
-			status = "ACTIVE"
-		}
-		if catalogItemID == "" {
-			return nil, fmt.Errorf("catalogItemId is required")
-		}
-		if supplierID == "" {
-			return nil, fmt.Errorf("supplierId is required")
-		}
-		if input.MRP <= 0 {
-			return nil, fmt.Errorf("mrp must be greater than zero")
-		}
-		if input.DiscountPercentage < 0 || input.DiscountPercentage > 100 {
-			return nil, fmt.Errorf("Buy Margin must be between 0 and 100")
-		}
-		if input.Quantity <= 0 {
-			return nil, fmt.Errorf("quantity must be greater than zero")
-		}
-		if status != "ACTIVE" && status != "INACTIVE" {
-			return nil, fmt.Errorf("status must be ACTIVE or INACTIVE")
-		}
-		if supplierID != headerSupplierID {
-			return nil, fmt.Errorf("all rows in one supply inward must have the same supplier")
-		}
-		if strings.TrimSpace(input.ReceivedAt) != headerReceivedAtRaw {
-			return nil, fmt.Errorf("all rows in one supply inward must have the same received date")
-		}
-		if receiptNote != headerNote {
-			return nil, fmt.Errorf("all rows in one supply inward must share the same note")
-		}
-
-		var catalogBrandID string
-		if err := tx.QueryRow(ctx, `
-			select c.brand_id
-			from partner_product_catalog c
-			join partner_firm_brands fb on fb.brand_id = c.brand_id
-			where c.id = $1 and fb.firm_id = $2
-		`, catalogItemID, firmID).Scan(&catalogBrandID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, fmt.Errorf("catalog item not available for this firm")
-			}
-			return nil, err
-		}
-		if brandID == "" {
-			brandID = catalogBrandID
-			if _, err := tx.Exec(ctx, `
-				insert into partner_supply_inwards (
-					id, firm_id, brand_id, supplier_id, received_at, note, status, created_by
-				) values ($1, $2, $3, $4, $5, nullif($6, ''), 'POSTED', $7)
-			`, supplyInwardID, firmID, brandID, headerSupplierID, headerReceivedAt, headerNote, s.currentUserID); err != nil {
-				return nil, err
-			}
-		} else if catalogBrandID != brandID {
-			return nil, fmt.Errorf("all rows in one supply inward must belong to the same brand")
-		}
-
-		itemID := ""
-		err = tx.QueryRow(ctx, `
-			select item_id
-			from partner_firm_inventory_items
-			where firm_id = $1 and catalog_item_id = $2 and mrp = $3 and discount_percentage = $4
-			limit 1
-		`, firmID, catalogItemID, input.MRP, input.DiscountPercentage).Scan(&itemID)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, err
-		}
-		if itemID == "" {
-			itemID = nextID("pfi")
-			if _, err := tx.Exec(ctx, `
-				insert into partner_firm_inventory_items (
-					item_id, firm_id, catalog_item_id, mrp, discount_percentage, status, quantity
-				) values ($1, $2, $3, $4, $5, $6, $7)
-			`, itemID, firmID, catalogItemID, input.MRP, input.DiscountPercentage, status, input.Quantity); err != nil {
-				return nil, err
-			}
-		} else {
-			if _, err := tx.Exec(ctx, `
-				update partner_firm_inventory_items
-				set quantity = quantity + $4,
-				    status = $5,
-				    updated_at = now()
-				where firm_id = $1 and item_id = $2 and catalog_item_id = $3
-			`, firmID, itemID, catalogItemID, input.Quantity, status); err != nil {
-				return nil, err
-			}
-		}
-		if _, err := tx.Exec(ctx, `
-			insert into partner_inventory_receipts (
-				id, firm_id, supply_inward_id, item_id, supplier_id, quantity, received_at, note, created_by
-			) values ($1, $2, $3, $4, $5, $6, $7, nullif($8, ''), $9)
-		`, nextID("prec"), firmID, supplyInwardID, itemID, supplierID, input.Quantity, headerReceivedAt, receiptNote, s.currentUserID); err != nil {
-			return nil, err
-		}
-		if _, err := tx.Exec(ctx, `
-			insert into partner_stock_entries (
-				id, firm_id, item_id, quantity_delta, reason_type, reference_type, reference_id, note, created_by, created_at
-			) values ($1, $2, $3, $4, 'PURCHASE', 'SUPPLY_INWARD', $5, nullif($6, ''), $7, $8)
-		`, nextID("pstock"), firmID, itemID, input.Quantity, supplyInwardID, receiptNote, s.currentUserID, headerReceivedAt); err != nil {
-			return nil, err
-		}
-		if _, ok := createdSet[itemID]; !ok {
-			createdSet[itemID] = struct{}{}
-			createdIDs = append(createdIDs, itemID)
-		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-
-	items, err := s.GetPartnerInventory(firmID, "")
-	if err != nil {
-		return nil, err
-	}
-	created := make([]PartnerInventoryItem, 0, len(createdIDs))
-	for _, item := range items {
-		if _, ok := createdSet[item.ItemID]; ok {
-			created = append(created, item)
-		}
-	}
-	return ensurePartnerInventoryItems(created), nil
-}
-
 func (s *Store) UpdatePartnerInventoryItem(firmID, itemID string, input UpdatePartnerInventoryItemInput) (PartnerInventoryItem, error) {
 	ctx := context.Background()
 	tx, err := s.pool.Begin(ctx)
@@ -9429,7 +9252,7 @@ func (s *Store) UpdatePartnerInventoryItem(firmID, itemID string, input UpdatePa
 		       to_char(i.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		from partner_firm_inventory_items i
 		join partner_product_catalog c on c.id = i.catalog_item_id
-		where i.firm_id = $1 and i.item_id = $2
+		where i.firm_id = $1::bigint and i.item_id = $2
 	`, firmID, itemID).Scan(
 		&current.FirmID,
 		&current.ItemID,
@@ -9473,7 +9296,7 @@ func (s *Store) UpdatePartnerInventoryItem(firmID, itemID string, input UpdatePa
 		set quantity = $3,
 		    status = $4,
 		    updated_at = now()
-		where firm_id = $1 and item_id = $2
+		where firm_id = $1::bigint and item_id = $2
 	`, firmID, itemID, current.Quantity, current.Status); err != nil {
 		return PartnerInventoryItem{}, err
 	}
@@ -9524,8 +9347,76 @@ func (s *Store) GetPartnerInventoryHistory(firmID string, filters PartnerInvento
 			from partner_inventory_receipts r
 			join partner_firm_inventory_items i on i.firm_id = r.firm_id and i.item_id = r.item_id
 			join partner_product_catalog c on c.id = i.catalog_item_id
-			where r.firm_id = $1
+			where r.firm_id = $1::bigint
+			  and r.supply_inward_id is not null
 			group by r.supply_inward_id, r.item_id, i.catalog_item_id, c.name, c.sku
+		),
+		grn_line_totals as (
+			select
+				g.id as grn_id,
+				g.firm_id,
+				g.grn_number,
+				g.received_date,
+				g.notes,
+				g.supplier_id,
+				s.supplier_name,
+				p.purchase_number,
+				c.brand_id,
+				gi.item_id,
+				i.catalog_item_id,
+				c.name as item_name,
+				c.sku,
+				sum(gi.received_quantity)::int as quantity
+			from partner_goods_receipts g
+			join partner_goods_receipt_items gi on gi.firm_id = g.firm_id and gi.grn_id = g.id
+			join partner_purchases p on p.firm_id = g.firm_id and p.id = g.purchase_id
+			join partner_suppliers s on s.firm_id = g.firm_id and s.id = g.supplier_id
+			join partner_firm_inventory_items i on i.firm_id = gi.firm_id and i.item_id = gi.item_id
+			join partner_product_catalog c on c.id = i.catalog_item_id
+			where g.firm_id = $1::bigint
+			  and gi.received_quantity > 0
+			group by g.id, g.firm_id, g.grn_number, g.received_date, g.notes, g.supplier_id, s.supplier_name, p.purchase_number, c.brand_id, gi.item_id, i.catalog_item_id, c.name, c.sku
+		),
+		grn_rows as (
+			select
+				lt.grn_id || ':' || lt.brand_id::text as id,
+				lt.firm_id,
+				lt.brand_id,
+				''::text as item_id,
+				''::text as catalog_item_id,
+				''::text as item_name,
+				''::text as sku,
+				'GOODS_RECEIPT'::text as event_type,
+				coalesce(sum(lt.quantity), 0)::int as quantity_delta,
+				0::int as quantity_from,
+				0::int as quantity_to,
+				lt.supplier_id,
+				lt.supplier_name,
+				trim(both ' ' from lt.grn_number || ' · ' || lt.purchase_number || coalesce(' · ' || nullif(lt.notes, ''), '')) as note,
+				'POSTED'::text as status,
+				''::text as reverted_at,
+				''::text as revert_reason,
+				lt.received_date::timestamptz as event_time,
+				jsonb_agg(
+					jsonb_build_object(
+						'itemId', lt.item_id,
+						'catalogItemId', lt.catalog_item_id,
+						'itemName', lt.item_name,
+						'sku', lt.sku,
+						'quantity', lt.quantity
+					)
+					order by lt.item_name asc, lt.sku asc
+				) as items_json,
+				false as can_revert,
+				lower(
+					coalesce(lt.supplier_name, '') || ' ' ||
+					coalesce(lt.grn_number, '') || ' ' ||
+					coalesce(lt.purchase_number, '') || ' ' ||
+					coalesce(lt.notes, '') || ' ' ||
+					coalesce(string_agg(lt.item_name || ' ' || lt.sku, ' ' order by lt.item_name asc, lt.sku asc), '')
+				) as search_text
+			from grn_line_totals lt
+			group by lt.grn_id, lt.firm_id, lt.brand_id, lt.supplier_id, lt.supplier_name, lt.grn_number, lt.purchase_number, lt.notes, lt.received_date
 		),
 		supply_inward_rows as (
 			select
@@ -9570,7 +9461,7 @@ func (s *Store) GetPartnerInventoryHistory(firmID string, filters PartnerInvento
 			join partner_suppliers s on s.firm_id = si.firm_id and s.id = si.supplier_id
 			join supply_inward_line_totals lt on lt.supply_inward_id = si.id
 			join partner_firm_inventory_items fi on fi.firm_id = si.firm_id and fi.item_id = lt.item_id
-			where si.firm_id = $1
+			where si.firm_id = $1::bigint
 			group by si.id, si.firm_id, si.brand_id, si.supplier_id, s.supplier_name, si.note, si.status, si.reverted_at, si.revert_reason, si.received_at
 		),
 		adjustment_rows as (
@@ -9599,9 +9490,11 @@ func (s *Store) GetPartnerInventoryHistory(firmID string, filters PartnerInvento
 			from partner_inventory_adjustments a
 			join partner_firm_inventory_items i on i.firm_id = a.firm_id and i.item_id = a.item_id
 			join partner_product_catalog c on c.id = i.catalog_item_id
-			where a.firm_id = $1
+			where a.firm_id = $1::bigint
 		),
 		history as (
+			select * from grn_rows
+			union all
 			select * from supply_inward_rows
 			union all
 			select * from adjustment_rows
@@ -9628,7 +9521,7 @@ func (s *Store) GetPartnerInventoryHistory(firmID string, filters PartnerInvento
 			to_char(event_time at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 			items_json::text
 		from history
-		where ($2 = '' or brand_id = $2)
+		where ($2 = '' or brand_id = $2::bigint)
 		  and ($3 = '' or event_time::date >= $3::date)
 		  and ($4 = '' or event_time::date <= $4::date)
 		  and ($5 = '' or search_text like lower('%' || $5 || '%'))
@@ -9695,7 +9588,7 @@ func (s *Store) RevertPartnerSupplyInward(firmID, supplyInwardID, reason string)
 	if err := tx.QueryRow(ctx, `
 		select status
 		from partner_supply_inwards
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, supplyInwardID).Scan(&currentStatus); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return PartnerInventoryHistoryEntry{}, fmt.Errorf("supply inward not found")
@@ -9718,7 +9611,7 @@ func (s *Store) RevertPartnerSupplyInward(firmID, supplyInwardID, reason string)
 			i.quantity as current_quantity
 		from partner_inventory_receipts r
 		join partner_firm_inventory_items i on i.firm_id = r.firm_id and i.item_id = r.item_id
-		where r.firm_id = $1 and r.supply_inward_id = $2
+		where r.firm_id = $1::bigint and r.supply_inward_id = $2
 		group by r.item_id, i.quantity
 	`, firmID, supplyInwardID)
 	if err != nil {
@@ -9752,7 +9645,7 @@ func (s *Store) RevertPartnerSupplyInward(firmID, supplyInwardID, reason string)
 			update partner_firm_inventory_items
 			set quantity = quantity - $3,
 			    updated_at = now()
-			where firm_id = $1 and item_id = $2
+			where firm_id = $1::bigint and item_id = $2
 		`, firmID, item.ItemID, item.RevertQuantity); err != nil {
 			return PartnerInventoryHistoryEntry{}, err
 		}
@@ -9770,7 +9663,7 @@ func (s *Store) RevertPartnerSupplyInward(firmID, supplyInwardID, reason string)
 		set status = 'VOIDED',
 		    voided_at = $3,
 		    void_reason = nullif($4, '')
-		where firm_id = $1 and supply_inward_id = $2
+		where firm_id = $1::bigint and supply_inward_id = $2
 	`, firmID, supplyInwardID, now, revertReason); err != nil {
 		return PartnerInventoryHistoryEntry{}, err
 	}
@@ -9780,7 +9673,7 @@ func (s *Store) RevertPartnerSupplyInward(firmID, supplyInwardID, reason string)
 		set status = 'REVERTED',
 		    reverted_at = $3,
 		    revert_reason = nullif($4, '')
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, supplyInwardID, now, revertReason); err != nil {
 		return PartnerInventoryHistoryEntry{}, err
 	}
@@ -9891,7 +9784,7 @@ func (s *Store) CurrentUserRole(entityID string) (EntityRole, bool) {
 	err := s.pool.QueryRow(ctx, `
 		select role
 		from entity_members
-		where user_id = $1 and entity_id = $2 and status = 'ACTIVE'
+		where user_id = $1::bigint and entity_id = $2 and status = 'ACTIVE'
 	`, s.currentUserID, entityID).Scan(&role)
 	if err != nil {
 		return "", false
@@ -9914,14 +9807,14 @@ func (s *Store) RemoveMember(entityID, userID string) (bool, error) {
 
 	if _, err := tx.Exec(ctx, `
 		delete from staff_service_capabilities
-		where entity_id = $1 and user_id = $2
+		where entity_id = $1 and user_id = $2::bigint
 	`, entityID, userID); err != nil {
 		return false, err
 	}
 
 	tag, err := tx.Exec(ctx, `
 		delete from entity_members
-		where entity_id = $1 and user_id = $2
+		where entity_id = $1 and user_id = $2::bigint
 	`, entityID, userID)
 	if err != nil {
 		return false, err
@@ -10055,7 +9948,7 @@ func (s *Store) AcceptInvite(token string) (EntityMember, error) {
 		select m.user_id, m.entity_id, u.name, coalesce(u.avatar_url, ''), u.phone, m.role, m.status, m.joined_at
 		from entity_members m
 		join users u on u.id = m.user_id
-		where m.user_id = $1 and m.entity_id = $2
+		where m.user_id = $1::bigint and m.entity_id = $2
 	`, currentUser.ID, invite.EntityID).Scan(
 		&member.UserID, &member.EntityID, &member.Name, &member.AvatarURL, &member.Phone, &member.Role, &member.Status, &member.JoinedAt,
 	)
@@ -10467,7 +10360,7 @@ func (s *Store) UpdateStaffCapabilities(userID string, input UpdateStaffCapabili
 
 	if _, err := tx.Exec(ctx, `
 		delete from staff_service_capabilities
-		where entity_id = $1 and user_id = $2
+		where entity_id = $1 and user_id = $2::bigint
 	`, input.EntityID, userID); err != nil {
 		return nil, err
 	}
@@ -11176,7 +11069,7 @@ func (s *Store) getPartnerStockRowTx(ctx context.Context, tx pgx.Tx, firmID, ite
 		join partner_product_catalog c on c.id = i.catalog_item_id
 		join partner_brands b on b.id = c.brand_id
 		join partner_firm_brands fb on fb.brand_id = c.brand_id and fb.firm_id = i.firm_id
-		where i.firm_id = $1 and i.item_id = $2
+		where i.firm_id = $1::bigint and i.item_id = $2
 	`, firmID, itemID).Scan(
 		&item.ItemID,
 		&item.CatalogItemID,
@@ -11490,7 +11383,7 @@ func (s *Store) getPartnerItemMeta(firmID string) (map[string]partnerItemMeta, e
 		join partner_product_catalog c on c.id = i.catalog_item_id
 		join partner_brands b on b.id = c.brand_id
 		join partner_firm_brands fb on fb.brand_id = c.brand_id and fb.firm_id = i.firm_id
-		where i.firm_id = $1
+		where i.firm_id = $1::bigint
 	`, firmID)
 	if err != nil {
 		return nil, err

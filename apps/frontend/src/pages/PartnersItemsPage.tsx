@@ -45,23 +45,31 @@ export function PartnersItemsPage() {
   }, [items.items, search]);
 
   useEffect(() => {
-    setBrandId((prev) => {
-      if (queryBrandId && brands.items.some((brand) => String(brand.id) === queryBrandId)) {
-        return queryBrandId;
-      }
-      if (prev && brands.items.some((brand) => String(brand.id) === prev)) {
-        return prev;
-      }
-      return brands.items[0]?.id ? String(brands.items[0].id) : "";
-    });
-  }, [brands.items, queryBrandId]);
+    if (!brands.items.length) {
+      setBrandId("");
+      return;
+    }
+    const nextBrandId =
+      queryBrandId && brands.items.some((brand) => String(brand.id) === queryBrandId)
+        ? queryBrandId
+        : brands.items[0]?.id
+          ? String(brands.items[0].id)
+          : "";
 
-  useEffect(() => {
-    if (!brandId) return;
+    setBrandId((current) => (current === nextBrandId ? current : nextBrandId));
+    if (nextBrandId && queryBrandId !== nextBrandId) {
+      const next = new URLSearchParams(searchParams);
+      next.set("brand", nextBrandId);
+      setSearchParams(next, { replace: true });
+    }
+  }, [brands.items, queryBrandId, searchParams, setSearchParams]);
+
+  function handleBrandChange(nextBrandId: string) {
+    setBrandId(nextBrandId);
     const next = new URLSearchParams(searchParams);
-    next.set("brand", brandId);
+    next.set("brand", nextBrandId);
     setSearchParams(next, { replace: true });
-  }, [brandId, searchParams, setSearchParams]);
+  }
 
   if (!activePartnerFirmId) {
     return <EmptyState>Select a firm to manage items.</EmptyState>;
@@ -76,7 +84,7 @@ export function PartnersItemsPage() {
           <div className="w-full sm:min-w-[280px] lg:w-[280px]">
             <Select
               value={brandId}
-              onValueChange={setBrandId}
+              onValueChange={handleBrandChange}
               options={brands.items.map((brand) => ({
                 value: String(brand.id),
                 label: brand.name,

@@ -1647,20 +1647,7 @@ func (h *Handler) createPartnerInventory(w http.ResponseWriter, r *http.Request)
 		forbidden(w, "firm access denied")
 		return
 	}
-
-	var req struct {
-		Items []store.CreatePartnerInventoryItemInput `json:"items"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		badRequest(w, err.Error())
-		return
-	}
-	items, err := st.CreatePartnerInventoryItems(firmID, req.Items)
-	if err != nil {
-		badRequest(w, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
+	badRequest(w, "supplier stock inward must be received through purchases and GRNs; use stock adjustments only for corrections")
 }
 
 func (h *Handler) updatePartnerInventory(w http.ResponseWriter, r *http.Request) {

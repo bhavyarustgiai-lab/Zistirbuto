@@ -218,7 +218,6 @@ export type PartnerStockReferenceType =
 export type PartnerReceivableStatus = "CURRENT" | "OVERDUE";
 export type PartnerReceivablesFilterStatus = "ALL" | "OUTSTANDING" | "OVERDUE";
 export type PartnerStockActionType =
-  | "PURCHASE_INWARD"
   | "RETURN_IN"
   | "RETURN_OUT"
   | "DAMAGE"
@@ -358,7 +357,7 @@ export type PartnerInventoryHistoryEntry = {
   catalogItemId?: string;
   itemName?: string;
   sku?: string;
-  eventType: "SUPPLY_INWARD" | "ADJUSTMENT";
+  eventType: "GOODS_RECEIPT" | "SUPPLY_INWARD" | "ADJUSTMENT";
   quantityDelta: number;
   quantityFrom?: number;
   quantityTo?: number;
@@ -1053,17 +1052,6 @@ export type PartnerStockActionInput = {
   invoiceId?: string;
   purchaseId?: string;
   damageCategory?: PartnerDamageCategory;
-};
-
-export type PartnerInventoryCreateInput = {
-  supplierId: string;
-  receivedAt?: string;
-  catalogItemId: string;
-  mrp: number;
-  discountPercentage: number;
-  status?: "ACTIVE" | "INACTIVE";
-  quantity: number;
-  note?: string;
 };
 
 export type PartnerInventoryUpdateInput = {

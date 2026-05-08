@@ -12,7 +12,6 @@ import type {
   PartnerFirm,
   PartnerGlobalSearchResult,
   PartnerGoodsReceipt,
-  PartnerInventoryCreateInput,
   PartnerInventoryHistoryEntry,
   PartnerInventoryItem,
   PartnerInventoryUpdateInput,
@@ -58,7 +57,6 @@ import {
   createPartnerStockAdjustment,
   cancelPartnerPurchase,
   cancelPartnerInvoice,
-  createPartnerInventory,
   finalizePartnerInvoice,
   finalizePartnerSupplierInvoice,
   createPartnerFirm,
@@ -1302,10 +1300,6 @@ export function usePartnerInventory(firmId: number | string, brandId: number | s
   return {
     items,
     refresh,
-    createBatch: async (input: PartnerInventoryCreateInput[]) => {
-      await createPartnerInventory(firmId, input);
-      await refresh();
-    },
     update: async (itemId: string, input: PartnerInventoryUpdateInput) => {
       await updatePartnerInventory(firmId, itemId, input);
       await refresh();

@@ -91,9 +91,9 @@ export function PartnersInventoryHistoryPage() {
       (history.items ?? []).map((item) => ({
         ...item,
         activityLabel:
-          item.eventType === "SUPPLY_INWARD" ? "Supplier inward" : "Manual adjustment",
+          item.eventType === "ADJUSTMENT" ? "Manual adjustment" : "Goods received",
         sourceLabel:
-          item.eventType === "SUPPLY_INWARD"
+          item.eventType !== "ADJUSTMENT"
             ? item.supplierName || "-"
             : `${item.quantityFrom ?? 0} -> ${item.quantityTo ?? 0}`,
       })),
@@ -109,7 +109,7 @@ export function PartnersInventoryHistoryPage() {
     <PartnersPageShell>
       <PartnersPageHeader
         title="History"
-        description="Review supplier inward entries and manual stock adjustments."
+        description="Review GRN receipts and manual stock adjustments."
         actions={
           <div className="w-full sm:min-w-[320px] lg:w-[320px]">
             <Select
@@ -254,11 +254,11 @@ export function PartnersInventoryHistoryPage() {
         )}
       </PartnersTableCard>
 
-      <Dialog open={Boolean(revertingEntry)} onClose={() => setRevertingEntryId("")} title="Revert Supply Inward">
+      <Dialog open={Boolean(revertingEntry)} onClose={() => setRevertingEntryId("")} title="Revert Receipt">
         {revertingEntry ? (
           <div className="space-y-4">
             <p className="text-sm text-slate-600">
-              This will revert the full supply inward transaction for <span className="font-medium text-slate-900">{revertingEntry.supplierName}</span>.
+              This will revert the full receipt transaction for <span className="font-medium text-slate-900">{revertingEntry.supplierName}</span>.
               Revert is allowed only because all involved items can stay at zero or above.
             </p>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -279,7 +279,7 @@ export function PartnersInventoryHistoryPage() {
               <Textarea
                 value={revertReason}
                 onChange={(event) => setRevertReason(event.target.value)}
-                placeholder="Optional reason for reverting this inward transaction"
+                placeholder="Optional reason for reverting this receipt"
                 className="min-h-[100px]"
               />
             </div>
@@ -297,12 +297,12 @@ export function PartnersInventoryHistoryPage() {
                     await history.revertSupplyInward(revertingEntry.id, revertReason.trim());
                     setRevertingEntryId("");
                     setRevertReason("");
-                    setStatusDialog({ tone: "success", title: "Supply inward reverted successfully" });
+                    setStatusDialog({ tone: "success", title: "Receipt reverted successfully" });
                   } catch (error) {
                     setStatusDialog({
                       tone: "error",
-                      title: "Supply inward revert failed",
-                      description: error instanceof Error ? error.message : "Failed to revert supply inward",
+                      title: "Receipt revert failed",
+                      description: error instanceof Error ? error.message : "Failed to revert receipt",
                     });
                   } finally {
                     setRevertSaving(false);

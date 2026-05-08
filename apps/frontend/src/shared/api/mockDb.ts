@@ -22,7 +22,6 @@ import type {
   PartnerFirmRole,
   PartnerGlobalSearchResult,
   PartnerGoodsReceipt,
-  PartnerInventoryCreateInput,
   PartnerInventoryHistoryEntry,
   PartnerInventoryItem,
   PartnerInventoryReceipt,
@@ -2978,153 +2977,6 @@ export const mockDb = {
       .sort((a, b) => a.itemName.localeCompare(b.itemName) || a.mrp - b.mrp || a.discountPercentage - b.discountPercentage);
   },
 
-  async createPartnerInventory(firmId: number, items: PartnerInventoryCreateInput[]) {
-    await wait();
-    if (items.length === 0) {
-      throw new Error("At least one inventory item is required");
-    }
-    const supplyInwardId = makeId("psi");
-    const firstInput = items[0];
-    const receivedAt = `${(firstInput.receivedAt?.trim() || todayISO())}T00:00:00.000Z`;
-    const firstCatalogItem = partnerCatalogItems.find((item) => item.id === firstInput.catalogItemId);
-    if (!firstCatalogItem) {
-      throw new Error("Catalog item not found");
-    }
-    const firstSupplier = partnerSuppliers.find((item) => item.firmId === firmId && item.id === firstInput.supplierId);
-    if (!firstSupplier) {
-      throw new Error("Supplier not found");
-    }
-    if (firstSupplier.status !== "ACTIVE") {
-      throw new Error("Supplier must be active");
-    }
-    partnerSupplyInwards = [
-      {
-        id: supplyInwardId,
-        firmId,
-        brandId: firstCatalogItem.brandId,
-        supplierId: firstSupplier.id,
-        supplierName: firstSupplier.supplierName,
-        receivedAt,
-        note: firstInput.note?.trim() || "",
-        status: "POSTED",
-        createdAt: new Date().toISOString(),
-      },
-      ...partnerSupplyInwards,
-    ];
-    const created: PartnerInventoryItem[] = [];
-    for (const input of items) {
-      if (!input.supplierId) {
-        throw new Error("Supplier is required");
-      }
-      if (!input.catalogItemId) {
-        throw new Error("Catalog item is required");
-      }
-      if (!Number.isInteger(input.mrp) || input.mrp <= 0) {
-        throw new Error("MRP must be a non-zero integer");
-      }
-      if (!Number.isFinite(input.discountPercentage) || input.discountPercentage < 0 || input.discountPercentage > 100) {
-        throw new Error("Buy Margin must be between 0 and 100");
-      }
-      if (!Number.isInteger(input.quantity) || input.quantity <= 0) {
-        throw new Error("Quantity must be a non-zero integer");
-      }
-      const catalogItem = partnerCatalogItems.find((item) => item.id === input.catalogItemId);
-      if (!catalogItem) {
-        throw new Error("Catalog item not found");
-      }
-      if (catalogItem.brandId !== firstCatalogItem.brandId) {
-        throw new Error("All rows in one supply inward must belong to the same brand");
-      }
-      const supplier = partnerSuppliers.find((item) => item.firmId === firmId && item.id === input.supplierId);
-      if (!supplier) {
-        throw new Error("Supplier not found");
-      }
-      if (supplier.status !== "ACTIVE") {
-        throw new Error("Supplier must be active");
-      }
-      if (supplier.id !== firstSupplier.id) {
-        throw new Error("All rows in one supply inward must have the same supplier");
-      }
-      if (!partnerFirmBrands.some((mapping) => mapping.firmId === firmId && mapping.brandId === catalogItem.brandId)) {
-        throw new Error("Catalog item is not mapped to this firm");
-      }
-      const existing = partnerFirmInventoryItems.find(
-        (item) =>
-          item.firmId === firmId &&
-          item.catalogItemId === input.catalogItemId &&
-          item.mrp === input.mrp &&
-          item.discountPercentage === input.discountPercentage,
-      );
-
-      if (existing) {
-        const next: PartnerInventoryItem = {
-          ...existing,
-          quantity: existing.quantity + input.quantity,
-          status: input.status ?? existing.status,
-          updatedAt: new Date().toISOString(),
-          lastSupplierId: supplier.id,
-          lastSupplierName: supplier.supplierName,
-          lastReceivedAt: `${receivedAt}T00:00:00.000Z`,
-        };
-        partnerFirmInventoryItems = partnerFirmInventoryItems.map((item) => (item.itemId === existing.itemId ? next : item));
-        partnerInventoryReceipts = [
-          {
-            id: makeId("prec"),
-            firmId,
-            supplyInwardId,
-            itemId: existing.itemId,
-            supplierId: supplier.id,
-            supplierName: supplier.supplierName,
-            quantity: input.quantity,
-            receivedAt,
-            note: input.note?.trim() || "",
-            status: "POSTED",
-            createdAt: new Date().toISOString(),
-          },
-          ...partnerInventoryReceipts,
-        ];
-        created.push(next);
-        continue;
-      }
-
-      const next: PartnerInventoryItem = {
-        firmId,
-        itemId: makeId("pfi"),
-        catalogItemId: input.catalogItemId,
-        brandId: catalogItem.brandId,
-        itemName: catalogItem.name,
-        sku: catalogItem.sku,
-        mrp: input.mrp,
-        discountPercentage: input.discountPercentage,
-        status: input.status ?? "ACTIVE",
-        quantity: input.quantity,
-        updatedAt: new Date().toISOString(),
-        lastSupplierId: supplier.id,
-        lastSupplierName: supplier.supplierName,
-        lastReceivedAt: `${receivedAt}T00:00:00.000Z`,
-      };
-      partnerFirmInventoryItems = [next, ...partnerFirmInventoryItems];
-      partnerInventoryReceipts = [
-        {
-          id: makeId("prec"),
-          firmId,
-          supplyInwardId,
-          itemId: next.itemId,
-          supplierId: supplier.id,
-          supplierName: supplier.supplierName,
-          quantity: input.quantity,
-          receivedAt,
-          note: input.note?.trim() || "",
-          status: "POSTED",
-          createdAt: new Date().toISOString(),
-        },
-        ...partnerInventoryReceipts,
-      ];
-      created.push(next);
-    }
-    return created;
-  },
-
   async updatePartnerInventory(firmId: number, itemId: string, input: PartnerInventoryUpdateInput) {
     await wait();
     const current = partnerFirmInventoryItems.find((item) => item.firmId === firmId && item.itemId === itemId);
@@ -5466,11 +5318,7 @@ export const mockDb = {
     let referenceId = input.referenceId || "";
     let note = input.note?.trim() || "";
 
-    if (input.actionType === "PURCHASE_INWARD") {
-      reasonType = "PURCHASE";
-      referenceType = referenceType || "PURCHASE";
-      referenceId = referenceId || input.purchaseId || makeId("purchase_inward");
-    } else if (input.actionType === "RETURN_IN") {
+    if (input.actionType === "RETURN_IN") {
       reasonType = "RETURN_IN";
       referenceType = input.invoiceId ? "INVOICE" : (referenceType || "RETURN");
       referenceId = input.invoiceId || referenceId || makeId("return_in");

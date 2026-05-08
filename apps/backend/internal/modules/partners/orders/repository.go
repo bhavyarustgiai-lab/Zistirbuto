@@ -30,7 +30,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, firmID, orderID, nextStat
 	if err := r.pool.QueryRow(ctx, `
 		select status
 		from partner_orders
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`, firmID, orderID).Scan(&currentStatus); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("order not found")
@@ -49,7 +49,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, firmID, orderID, nextStat
 		    delivered_at = case when $3 = 'DELIVERED' then now() else delivered_at end,
 		    cancelled_at = case when $3 = 'CANCELLED' then now() else cancelled_at end,
 		    updated_at = now()
-		where firm_id = $1 and id = $2
+		where firm_id = $1::bigint and id = $2
 	`
 	_, err := r.pool.Exec(ctx, query, firmID, orderID, nextStatus)
 	return err

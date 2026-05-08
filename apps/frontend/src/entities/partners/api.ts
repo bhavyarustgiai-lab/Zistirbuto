@@ -23,7 +23,6 @@ import type {
   PartnerFirmMembership,
   PartnerFirmRole,
   PartnerCatalogItem,
-  PartnerInventoryCreateInput,
   PartnerInventoryHistoryEntry,
   PartnerInventoryItem,
   PartnerInventoryUpdateInput,
@@ -1055,16 +1054,6 @@ export async function revertPartnerSupplyInward(firmId: NumericIdParam, supplyIn
       body: JSON.stringify({ reason }),
     },
   );
-}
-
-export async function createPartnerInventory(firmId: NumericIdParam, items: PartnerInventoryCreateInput[]) {
-  if (env.useMocks) {
-    return looseMockDb.createPartnerInventory(firmId, items);
-  }
-  return http<PartnerInventoryItem[]>(`/partners/firms/${encodeURIComponent(firmId)}/inventory`, {
-    method: "POST",
-    body: JSON.stringify({ items }),
-  });
 }
 
 export async function updatePartnerInventory(firmId: NumericIdParam, itemId: string, input: PartnerInventoryUpdateInput) {

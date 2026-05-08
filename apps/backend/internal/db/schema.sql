@@ -56,7 +56,7 @@ CREATE TABLE public.day_entries (
     date date NOT NULL,
     start_time text,
     service_id text NOT NULL,
-    staff_id bigint NOT NULL,
+    staff_id text NOT NULL,
     staff_ids jsonb DEFAULT '[]'::jsonb NOT NULL,
     price_override integer,
     customer_name text,
@@ -504,7 +504,7 @@ CREATE TABLE public.partner_inventory_receipts (
     status text DEFAULT 'POSTED'::text NOT NULL,
     voided_at timestamp with time zone,
     void_reason text,
-    supply_inward_id text NOT NULL,
+    supply_inward_id text,
     CONSTRAINT partner_inventory_receipts_quantity_check CHECK ((quantity > 0)),
     CONSTRAINT partner_inventory_receipts_status_check CHECK ((status = ANY (ARRAY['POSTED'::text, 'VOIDED'::text])))
 );

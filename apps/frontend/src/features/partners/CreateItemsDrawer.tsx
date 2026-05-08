@@ -344,7 +344,7 @@ export function CreateItemsDrawer({ open, onClose, onSubmit, existingSkus }: Pro
                   </div>
 
                   <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                    Catalog stores product identity and fallback buying terms. Add inventory pre-fills MRP and Buy Margin from here, but each inward row can be changed.
+                    Catalog stores product identity and fallback buying terms used when purchase orders are created.
                   </p>
 
                 </div>
