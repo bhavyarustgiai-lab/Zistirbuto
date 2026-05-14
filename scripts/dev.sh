@@ -12,9 +12,15 @@ mkdir -p "$GO_CACHE_DIR"
 cd "$BACKEND_DIR"
 docker compose up -d
 
-if [[ -f ".env" ]]; then
+if [[ -f "$ROOT_DIR/.env" ]]; then
   set -a
-  source ".env"
+  source "$ROOT_DIR/.env"
+  set +a
+fi
+
+if [[ -f "$BACKEND_DIR/.env" ]]; then
+  set -a
+  source "$BACKEND_DIR/.env"
   set +a
 fi
 

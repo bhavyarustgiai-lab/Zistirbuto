@@ -824,10 +824,7 @@ CREATE TABLE public.partner_product_catalog (
     status text DEFAULT 'ACTIVE'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    default_mrp integer DEFAULT 0 NOT NULL,
-    default_discount_percentage numeric(5,2) DEFAULT 0 NOT NULL,
     gst_percentage numeric(5,2) DEFAULT 0 NOT NULL,
-    CONSTRAINT chk_partner_product_catalog_default_pricing CHECK (((default_mrp >= 0) AND (default_discount_percentage >= (0)::numeric) AND (default_discount_percentage <= (100)::numeric))),
     CONSTRAINT partner_product_catalog_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'INACTIVE'::text])))
 );
 

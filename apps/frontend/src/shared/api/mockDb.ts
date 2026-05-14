@@ -74,8 +74,9 @@ let currentUser: MockAuthUser = {
   phone: "9876500000",
   birthDate: "",
 };
-let authenticated = true;
+let authenticated = false;
 let authUsers: MockAuthUser[] = [currentUser];
+let nextMockUserId = 2;
 
 const loginOtps: Record<string, string> = {};
 
@@ -390,8 +391,6 @@ let partnerCatalogItems: PartnerCatalogItem[] = Array.from(
         description: item.description,
         hsnCode: item.hsnCode,
         sku: item.sku,
-        defaultMrp: item.mrp,
-        defaultDiscountPercentage: item.discountPercentage ?? 0,
         status: item.status,
         updatedAt: item.updatedAt,
       } satisfies PartnerCatalogItem,
@@ -1825,28 +1824,6 @@ function seedPartnerErpData() {
 seedPartnerErpData();
 
 export const mockDb = {
-  async getMe() {
-    await wait();
-    if (!authenticated) {
-      throw new Error("Authentication required");
-    }
-    invites = invites.map(expireInviteIfNeeded);
-    const accessibleClients = getAccessibleClients();
-    const memberships = entityMembers.filter(
-      (member) => member.userId === currentUser.id && member.status === "ACTIVE",
-    );
-    const currentClientId = accessibleClients[0]?.id ?? "";
-    const currentEntityRole = memberships.find((membership) => membership.entityId === currentClientId)?.role;
-
-    return {
-      user: currentUser,
-      clients: accessibleClients,
-      currentClientId,
-      memberships,
-      currentEntityRole,
-    };
-  },
-
   async requestLoginOtp(input: { phone: string }) {
     await wait();
     const phone = normalizePhone(input.phone);
@@ -1870,7 +1847,7 @@ export const mockDb = {
     delete loginOtps[phone];
     if (!user) {
       const nextUser = {
-        id: makeId("usr"),
+        id: nextMockUserId++,
         name: "",
         phone,
         birthDate: "",
@@ -1910,45 +1887,6 @@ export const mockDb = {
     await wait();
     authenticated = false;
     return { ok: true as const };
-  },
-
-  async createEntity(input: {
-    ownerName: string;
-    ownerPhone: string;
-    name: string;
-    clientType: Client["clientType"];
-    address: string;
-    location: { lat: number; lng: number };
-    images: string[];
-  }) {
-    await wait();
-    currentUser = {
-      ...currentUser,
-      name: input.ownerName.trim(),
-      phone: input.ownerPhone.trim(),
-    };
-    authUsers = authUsers.map((item) =>
-      item.id === currentUser.id ? { ...item, ...currentUser } : item,
-    );
-    const next: Client = {
-      id: makeId("client"),
-      name: input.name,
-      clientType: input.clientType,
-    };
-    clients = [...clients, next];
-    entityMembers = [
-      {
-        userId: currentUser.id,
-        entityId: next.id,
-        name: input.ownerName.trim(),
-        phone: input.ownerPhone.trim(),
-        role: "OWNER",
-        status: "ACTIVE",
-        joinedAt: new Date().toISOString(),
-      },
-      ...entityMembers,
-    ];
-    return next;
   },
 
   async getDayEntries(clientId: string, fromDate: string, toDate: string) {
@@ -2846,8 +2784,6 @@ export const mockDb = {
       description?: string;
       sku?: string;
       hsnCode?: string;
-      defaultMrp?: number;
-      defaultDiscountPercentage?: number;
       status?: "ACTIVE" | "INACTIVE";
     }
   ) {
@@ -2867,14 +2803,6 @@ export const mockDb = {
     if (input.hsnCode?.trim() && !/^\d+$/.test(input.hsnCode.trim())) {
       throw new Error("hsnCode must contain digits only");
     }
-    const defaultMrp = input.defaultMrp ?? 0;
-    const defaultDiscountPercentage = input.defaultDiscountPercentage ?? 0;
-    if (!Number.isInteger(defaultMrp) || defaultMrp <= 0) {
-      throw new Error("defaultMrp must be greater than zero");
-    }
-    if (!Number.isFinite(defaultDiscountPercentage) || defaultDiscountPercentage < 0 || defaultDiscountPercentage > 100) {
-      throw new Error("Default Buy Margin must be between 0 and 100");
-    }
 
     const next: PartnerCatalogItem = {
       id: makeId("pcat"),
@@ -2883,8 +2811,6 @@ export const mockDb = {
       description: input.description?.trim() || "",
       hsnCode: input.hsnCode?.trim() || "",
       sku,
-      defaultMrp,
-      defaultDiscountPercentage,
       status: input.status ?? "ACTIVE",
       updatedAt: new Date().toISOString(),
     };
@@ -2900,8 +2826,6 @@ export const mockDb = {
       name?: string;
       description?: string;
       hsnCode?: string;
-      defaultMrp?: number;
-      defaultDiscountPercentage?: number;
       status?: "ACTIVE" | "INACTIVE";
     }
   ) {
@@ -2921,21 +2845,11 @@ export const mockDb = {
     if (candidateHSNCode && !/^\d+$/.test(candidateHSNCode)) {
       throw new Error("hsnCode must contain digits only");
     }
-    const candidateDefaultMrp = patch.defaultMrp ?? current.defaultMrp;
-    const candidateDefaultDiscountPercentage = patch.defaultDiscountPercentage ?? current.defaultDiscountPercentage;
-    if (!Number.isInteger(candidateDefaultMrp) || candidateDefaultMrp <= 0) {
-      throw new Error("defaultMrp must be greater than zero");
-    }
-    if (!Number.isFinite(candidateDefaultDiscountPercentage) || candidateDefaultDiscountPercentage < 0 || candidateDefaultDiscountPercentage > 100) {
-      throw new Error("Default Buy Margin must be between 0 and 100");
-    }
     const next: PartnerCatalogItem = {
       ...current,
       name: patch.name != null ? patch.name.trim() : current.name,
       description: patch.description != null ? patch.description.trim() : current.description,
       hsnCode: candidateHSNCode,
-      defaultMrp: candidateDefaultMrp,
-      defaultDiscountPercentage: candidateDefaultDiscountPercentage,
       status: patch.status ?? current.status,
       updatedAt: new Date().toISOString(),
     };
@@ -3230,7 +3144,7 @@ export const mockDb = {
       if (item.status !== "ACTIVE") {
         throw new Error("Order item is inactive");
       }
-      const sellerMarginPercentage = input.sellerMarginPercentage ?? item.defaultDiscountPercentage;
+      const sellerMarginPercentage = input.sellerMarginPercentage ?? 0;
       if (!Number.isFinite(sellerMarginPercentage) || sellerMarginPercentage < 0 || sellerMarginPercentage > 100) {
         throw new Error("Seller margin must be between 0 and 100");
       }
@@ -3242,7 +3156,7 @@ export const mockDb = {
         itemName: item.name,
         unit: "",
         quantity: line.quantity,
-        mrp: item.defaultMrp,
+        mrp: 0,
         discountPercentage: sellerMarginPercentage,
       };
     });
@@ -3675,7 +3589,7 @@ export const mockDb = {
       const item = partnerCatalogItems.find((candidate) => candidate.id === line.itemId);
       if (!item) throw new Error("Order item not found");
       if (item.status !== "ACTIVE") throw new Error("Order item is inactive");
-      const sellerMarginPercentage = input.sellerMarginPercentage ?? item.defaultDiscountPercentage;
+      const sellerMarginPercentage = input.sellerMarginPercentage ?? 0;
       if (!Number.isFinite(sellerMarginPercentage) || sellerMarginPercentage < 0 || sellerMarginPercentage > 100) {
         throw new Error("Seller margin must be between 0 and 100");
       }
@@ -3687,7 +3601,7 @@ export const mockDb = {
         itemName: item.name,
         unit: "",
         quantity: line.quantity,
-        mrp: item.defaultMrp,
+        mrp: 0,
         discountPercentage: sellerMarginPercentage,
       };
     });

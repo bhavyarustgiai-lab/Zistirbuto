@@ -20,6 +20,7 @@ export type RequestLoginOtpResponse = {
   ok: true;
   phone: string;
   expiresAt: string;
+  otp?: string;
 };
 
 export type RequestLoginOtpInput = {

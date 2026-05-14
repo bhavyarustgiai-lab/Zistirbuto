@@ -142,8 +142,6 @@ export function PartnersItemsPage() {
                       <div className="mt-4 grid gap-2 sm:grid-cols-2">
                         <p className="text-sm text-slate-700">Description: {item.description?.trim() || "-"}</p>
                         <p className="text-sm text-slate-700">HSN code: {item.hsnCode?.trim() || "-"}</p>
-                        <p className="text-sm text-slate-700">Default MRP: {item.defaultMrp || "-"}</p>
-                        <p className="text-sm text-slate-700">Default Buy Margin: {item.defaultDiscountPercentage ?? 0}%</p>
                         <div className="sm:col-span-2">
                           <Badge tone={item.status === "ACTIVE" ? "active" : "inactive"}>
                             {item.status}
@@ -155,15 +153,13 @@ export function PartnersItemsPage() {
             </div>
 
             <div className="hidden overflow-x-auto bg-white md:block">
-              <table className="w-full min-w-[1120px] text-sm">
+              <table className="w-full min-w-[860px] text-sm">
                 <thead className="text-left text-slate-500">
                   <tr className="border-b border-slate-200">
                     <th className="px-3 py-2">SKU</th>
                     <th className="px-3 py-2">Name</th>
                     <th className="px-3 py-2">Description</th>
                     <th className="px-3 py-2">HSN code</th>
-                    <th className="px-3 py-2 text-right">Default MRP</th>
-                    <th className="px-3 py-2 text-right">Default Buy Margin</th>
                     <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2">Actions</th>
                   </tr>
@@ -185,12 +181,6 @@ export function PartnersItemsPage() {
                       </td>
                       <td className="px-3 py-2 align-middle text-slate-700">
                         {item.hsnCode?.trim() || "-"}
-                      </td>
-                      <td className="px-3 py-2 text-right align-middle text-slate-700">
-                        {item.defaultMrp || "-"}
-                      </td>
-                      <td className="px-3 py-2 text-right align-middle text-slate-700">
-                        {item.defaultDiscountPercentage ?? 0}%
                       </td>
                       <td className="px-3 py-2 align-middle text-slate-700">
                         <Badge tone={item.status === "ACTIVE" ? "active" : "inactive"}>

@@ -1,27 +1,21 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from "react";
-import { createEntity, type CreateEntityInput, getMe } from "@entities/client/api";
 import { createPartnerFirm, getPartnersMe, updatePartnerFirm, type PartnerFirmInput, type PartnerFirmUpdateInput } from "@entities/partners/api";
 import { logout, requestLoginOtp, updateProfile, verifyLoginOtp, type AuthUser, type RequestLoginOtpInput, type RequestLoginOtpResponse, type UpdateProfileInput, type VerifyLoginOtpInput, type VerifyLoginOtpResponse } from "@entities/auth/api";
 import { ApiError } from "@shared/api/http";
-import type { Client, EntityMember, EntityRole, PartnerFirm } from "@shared/types/domain";
+import type { PartnerFirm } from "@shared/types/domain";
 
 const PARTNER_ACTIVE_FIRM_STORAGE_KEY = "zistributo.partners.activeFirmId";
 
 type AppState = {
   loading: boolean;
-  clients: Client[];
-  currentClientId: string;
   currentUser: AuthUser | null;
-  memberships: EntityMember[];
   partnerFirms: PartnerFirm[];
   partnerUserEmail?: string;
+  partnerLoadError?: string;
   activePartnerFirmId: number;
-  currentEntityRole?: EntityRole;
-  setCurrentClientId: (id: string) => void;
   setActivePartnerFirmId: (id: number) => void;
   createPartnerFirm: (input: PartnerFirmInput) => Promise<PartnerFirm>;
   updatePartnerFirm: (firmId: number, input: PartnerFirmUpdateInput) => Promise<PartnerFirm>;
-  createEntity: (input: CreateEntityInput) => Promise<Client>;
   requestLoginOtp: (input: RequestLoginOtpInput) => Promise<RequestLoginOtpResponse>;
   verifyLoginOtp: (input: VerifyLoginOtpInput) => Promise<VerifyLoginOtpResponse>;
   updateProfile: (input: UpdateProfileInput) => Promise<void>;
@@ -57,12 +51,10 @@ function uniquePartnerFirms(firms: PartnerFirm[]) {
 
 export function AppStateProvider({ children }: PropsWithChildren) {
   const [loading, setLoading] = useState(true);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [currentClientId, setCurrentClientId] = useState("");
   const [currentUser, setCurrentUser] = useState<AppState["currentUser"]>(null);
-  const [memberships, setMemberships] = useState<EntityMember[]>([]);
   const [partnerFirms, setPartnerFirms] = useState<PartnerFirm[]>([]);
   const [partnerUserEmail, setPartnerUserEmail] = useState("");
+  const [partnerLoadError, setPartnerLoadError] = useState("");
   const [activePartnerFirmId, setActivePartnerFirmIdState] = useState(() => {
     if (typeof window === "undefined") return 0;
     const stored = Number(window.localStorage.getItem(PARTNER_ACTIVE_FIRM_STORAGE_KEY) ?? "0");
@@ -78,29 +70,20 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   const resetSessionState = useCallback(() => {
     setCurrentUser(null);
-    setClients([]);
-    setMemberships([]);
     setPartnerFirms([]);
     setPartnerUserEmail("");
+    setPartnerLoadError("");
     setActivePartnerFirmIdState(0);
-    setCurrentClientId("");
   }, []);
 
   const refresh = useCallback(async () => {
     try {
-      const [res, partnersRes] = await Promise.all([getMe(), getPartnersMe()]);
-      setClients(res.clients);
-      setCurrentClientId((prev) => {
-        if (prev && res.clients.some((client) => client.id === prev)) {
-          return prev;
-        }
-        return res.currentClientId;
-      });
-      setCurrentUser(res.user);
-      setMemberships(res.memberships);
+      const partnersRes = await getPartnersMe();
+      setCurrentUser(partnersRes.user);
       const firms = uniquePartnerFirms(partnersRes.firms);
       setPartnerFirms(firms);
       setPartnerUserEmail(partnersRes.user.email ?? "");
+      setPartnerLoadError("");
       setActivePartnerFirmIdState((prev) => {
         const existing = prev || (typeof window !== "undefined"
           ? Number(window.localStorage.getItem(PARTNER_ACTIVE_FIRM_STORAGE_KEY) ?? "0")
@@ -119,7 +102,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         resetSessionState();
         return;
       }
-      throw error;
+      const message = error instanceof Error ? error.message : "Something went wrong, please try again later";
+      setPartnerFirms([]);
+      setPartnerUserEmail("");
+      setPartnerLoadError(message);
     }
   }, [resetSessionState]);
 
@@ -131,13 +117,6 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       })
       .finally(() => setLoading(false));
   }, [refresh, resetSessionState]);
-
-  const handleCreateEntity = useCallback(async (input: CreateEntityInput) => {
-    const next = await createEntity(input);
-    await refresh();
-    setCurrentClientId(next.id);
-    return next;
-  }, [refresh]);
 
   const handleCreatePartnerFirm = useCallback(async (input: PartnerFirmInput) => {
     const next = await createPartnerFirm(input);
@@ -175,27 +154,17 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }
   }, [resetSessionState]);
 
-  const currentEntityRole = useMemo(
-    () => memberships.find((membership) => membership.entityId === currentClientId)?.role,
-    [currentClientId, memberships]
-  );
-
   const value = useMemo(
     () => ({
       loading,
-      clients,
-      currentClientId,
       currentUser,
-      memberships,
       partnerFirms,
       partnerUserEmail,
+      partnerLoadError,
       activePartnerFirmId,
-      currentEntityRole,
-      setCurrentClientId,
       setActivePartnerFirmId,
       createPartnerFirm: handleCreatePartnerFirm,
       updatePartnerFirm: handleUpdatePartnerFirm,
-      createEntity: handleCreateEntity,
       requestLoginOtp: handleRequestLoginOtp,
       verifyLoginOtp: handleVerifyLoginOtp,
       updateProfile: handleUpdateProfile,
@@ -204,15 +173,11 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }),
     [
       loading,
-      clients,
-      currentClientId,
       currentUser,
-      memberships,
       partnerFirms,
       partnerUserEmail,
+      partnerLoadError,
       activePartnerFirmId,
-      currentEntityRole,
-      handleCreateEntity,
       handleCreatePartnerFirm,
       handleUpdatePartnerFirm,
       handleRequestLoginOtp,

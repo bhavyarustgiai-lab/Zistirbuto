@@ -17,8 +17,6 @@ type ItemDraft = {
   description: string;
   sku: string;
   hsnCode: string;
-  defaultMrp: string;
-  defaultDiscountPercentage: string;
   status: "ACTIVE" | "INACTIVE";
 };
 
@@ -32,8 +30,6 @@ type Props = {
       description?: string;
       sku?: string;
       hsnCode?: string;
-      defaultMrp?: number;
-      defaultDiscountPercentage?: number;
       status?: "ACTIVE" | "INACTIVE";
     }>,
   ) => Promise<void>;
@@ -46,23 +42,11 @@ function makeRow(): ItemDraft {
     description: "",
     sku: "",
     hsnCode: "",
-    defaultMrp: "",
-    defaultDiscountPercentage: "",
     status: "ACTIVE",
   };
 }
 
-function digitsOnly(value: string) {
-  return value.replace(/\D+/g, "");
-}
-
-function decimalNumberOnly(value: string) {
-  const cleaned = value.replace(/[^\d.]/g, "");
-  const [integerPart, ...decimalParts] = cleaned.split(".");
-  return decimalParts.length > 0 ? `${integerPart}.${decimalParts.join("")}` : integerPart;
-}
-
-function fieldKey(rowId: string, field: "name" | "description" | "sku" | "hsnCode" | "defaultMrp" | "defaultDiscountPercentage") {
+function fieldKey(rowId: string, field: "name" | "description" | "sku" | "hsnCode") {
   return `${rowId}.${field}`;
 }
 
@@ -263,69 +247,6 @@ export function CreateItemsDrawer({ open, onClose, onSubmit, existingSkus }: Pro
                     </div>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div>
-                      <PartnerFieldLabel className="mb-2 text-sm font-semibold text-slate-800">Default MRP</PartnerFieldLabel>
-                      <Input
-                        ref={(node) => {
-                          fieldRefs.current[fieldKey(row.id, "defaultMrp")] = node;
-                        }}
-                        value={row.defaultMrp}
-                        placeholder="Enter default MRP"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        className={[
-                          "h-12 rounded-2xl bg-white text-[15px]",
-                          errors[fieldKey(row.id, "defaultMrp")] ? "border-rose-300 ring-2 ring-rose-100" : "border-slate-200",
-                          shakingField === fieldKey(row.id, "defaultMrp") ? "field-shake" : "",
-                        ].join(" ")}
-                        onChange={(event) => {
-                          const next = digitsOnly(event.target.value);
-                          setErrors((prev) => {
-                            if (!prev[fieldKey(row.id, "defaultMrp")]) return prev;
-                            const copy = { ...prev };
-                            delete copy[fieldKey(row.id, "defaultMrp")];
-                            return copy;
-                          });
-                          setRows((prev) =>
-                            prev.map((current) => (current.id === row.id ? { ...current, defaultMrp: next } : current)),
-                          );
-                        }}
-                      />
-                      {errors[fieldKey(row.id, "defaultMrp")] ? <FormMessage>{errors[fieldKey(row.id, "defaultMrp")]}</FormMessage> : null}
-                    </div>
-                    <div>
-                      <PartnerFieldLabel className="mb-2 text-sm font-semibold text-slate-800">Default Buy Margin %</PartnerFieldLabel>
-                      <Input
-                        ref={(node) => {
-                          fieldRefs.current[fieldKey(row.id, "defaultDiscountPercentage")] = node;
-                        }}
-                        value={row.defaultDiscountPercentage}
-                        placeholder="Enter default buy margin"
-                        inputMode="decimal"
-                        pattern="[0-9]*[.]?[0-9]*"
-                        className={[
-                          "h-12 rounded-2xl bg-white text-[15px]",
-                          errors[fieldKey(row.id, "defaultDiscountPercentage")] ? "border-rose-300 ring-2 ring-rose-100" : "border-slate-200",
-                          shakingField === fieldKey(row.id, "defaultDiscountPercentage") ? "field-shake" : "",
-                        ].join(" ")}
-                        onChange={(event) => {
-                          const next = decimalNumberOnly(event.target.value);
-                          setErrors((prev) => {
-                            if (!prev[fieldKey(row.id, "defaultDiscountPercentage")]) return prev;
-                            const copy = { ...prev };
-                            delete copy[fieldKey(row.id, "defaultDiscountPercentage")];
-                            return copy;
-                          });
-                          setRows((prev) =>
-                            prev.map((current) => (current.id === row.id ? { ...current, defaultDiscountPercentage: next } : current)),
-                          );
-                        }}
-                      />
-                      {errors[fieldKey(row.id, "defaultDiscountPercentage")] ? <FormMessage>{errors[fieldKey(row.id, "defaultDiscountPercentage")]}</FormMessage> : null}
-                    </div>
-                  </div>
-
                   <div>
                     <PartnerFieldLabel className="mb-2 text-sm font-semibold text-slate-800">Status</PartnerFieldLabel>
                     <Select
@@ -344,7 +265,7 @@ export function CreateItemsDrawer({ open, onClose, onSubmit, existingSkus }: Pro
                   </div>
 
                   <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                    Catalog stores product identity and fallback buying terms used when purchase orders are created.
+                    Catalog stores product identity used across orders, stock, and documents.
                   </p>
 
                 </div>
@@ -383,8 +304,6 @@ export function CreateItemsDrawer({ open, onClose, onSubmit, existingSkus }: Pro
                   description?: string;
                   sku?: string;
                   hsnCode?: string;
-                  defaultMrp?: number;
-                  defaultDiscountPercentage?: number;
                   status?: "ACTIVE" | "INACTIVE";
                 }> = [];
                 const existingSkuSet = new Set(existingSkus.map((sku) => sku.trim().toLowerCase()).filter(Boolean));
@@ -395,8 +314,6 @@ export function CreateItemsDrawer({ open, onClose, onSubmit, existingSkus }: Pro
                   const description = row.description.trim();
                   const sku = row.sku.trim();
                   const hsnCode = row.hsnCode.trim();
-                  const defaultMrp = Number.parseInt(row.defaultMrp, 10);
-                  const defaultDiscountPercentage = Number.parseFloat(row.defaultDiscountPercentage || "0");
                   const normalizedSku = sku.toLowerCase();
                   if (!sku) {
                     nextErrors[fieldKey(row.id, "sku")] = "SKU code is required.";
@@ -410,30 +327,19 @@ export function CreateItemsDrawer({ open, onClose, onSubmit, existingSkus }: Pro
                   if (hsnCode && !/^\d+$/.test(hsnCode)) {
                     nextErrors[fieldKey(row.id, "hsnCode")] = "HSN code must contain digits only.";
                   }
-                  if (!Number.isInteger(defaultMrp) || defaultMrp <= 0) {
-                    nextErrors[fieldKey(row.id, "defaultMrp")] = "Default MRP must be a non-zero integer.";
-                  }
-                  if (!Number.isFinite(defaultDiscountPercentage) || defaultDiscountPercentage < 0 || defaultDiscountPercentage > 100) {
-                    nextErrors[fieldKey(row.id, "defaultDiscountPercentage")] = "Default Buy Margin must be between 0 and 100.";
-                  }
-
                   if (!name) {
                     nextErrors[fieldKey(row.id, "name")] = "Item name is required.";
                   }
 
                   if (
                     !nextErrors[fieldKey(row.id, "name")] &&
-                    !nextErrors[fieldKey(row.id, "sku")] &&
-                    !nextErrors[fieldKey(row.id, "defaultMrp")] &&
-                    !nextErrors[fieldKey(row.id, "defaultDiscountPercentage")]
+                    !nextErrors[fieldKey(row.id, "sku")]
                   ) {
                     payload.push({
                       name,
                       description: description || undefined,
                       sku,
                       hsnCode: hsnCode || undefined,
-                      defaultMrp,
-                      defaultDiscountPercentage,
                       status: row.status,
                     });
                   }

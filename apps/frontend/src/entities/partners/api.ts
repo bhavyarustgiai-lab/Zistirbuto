@@ -221,8 +221,6 @@ export async function createPartnerBrandItem(
     description?: string;
     sku?: string;
     hsnCode?: string;
-    defaultMrp?: number;
-    defaultDiscountPercentage?: number;
     status?: "ACTIVE" | "INACTIVE";
   }
 ) {
@@ -243,8 +241,6 @@ export async function updatePartnerBrandItem(
     name?: string;
     description?: string;
     hsnCode?: string;
-    defaultMrp?: number;
-    defaultDiscountPercentage?: number;
     status?: "ACTIVE" | "INACTIVE";
   }
 ) {

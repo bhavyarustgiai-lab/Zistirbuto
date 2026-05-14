@@ -260,16 +260,14 @@ type PartnerBrand struct {
 }
 
 type PartnerCatalogItem struct {
-	ID                        string  `json:"id"`
-	BrandID                   string  `json:"brandId"`
-	Name                      string  `json:"name"`
-	Description               string  `json:"description,omitempty"`
-	HSNCode                   string  `json:"hsnCode,omitempty"`
-	SKU                       string  `json:"sku"`
-	DefaultMRP                int     `json:"defaultMrp"`
-	DefaultDiscountPercentage float64 `json:"defaultDiscountPercentage"`
-	Status                    string  `json:"status"`
-	UpdatedAt                 string  `json:"updatedAt"`
+	ID          string `json:"id"`
+	BrandID     string `json:"brandId"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	HSNCode     string `json:"hsnCode,omitempty"`
+	SKU         string `json:"sku"`
+	Status      string `json:"status"`
+	UpdatedAt   string `json:"updatedAt"`
 }
 
 type PartnerItem struct {
@@ -1247,23 +1245,19 @@ type CreatePartnerFirmBrandInput struct {
 }
 
 type CreatePartnerBrandItemInput struct {
-	Name                      string  `json:"name"`
-	Description               string  `json:"description,omitempty"`
-	SKU                       string  `json:"sku,omitempty"`
-	HSNCode                   string  `json:"hsnCode,omitempty"`
-	DefaultMRP                int     `json:"defaultMrp,omitempty"`
-	DefaultDiscountPercentage float64 `json:"defaultDiscountPercentage,omitempty"`
-	Status                    string  `json:"status,omitempty"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	SKU         string `json:"sku,omitempty"`
+	HSNCode     string `json:"hsnCode,omitempty"`
+	Status      string `json:"status,omitempty"`
 }
 
 type UpdatePartnerBrandItemInput struct {
-	Name                      *string  `json:"name,omitempty"`
-	Description               *string  `json:"description,omitempty"`
-	SKU                       *string  `json:"sku,omitempty"`
-	HSNCode                   *string  `json:"hsnCode,omitempty"`
-	DefaultMRP                *int     `json:"defaultMrp,omitempty"`
-	DefaultDiscountPercentage *float64 `json:"defaultDiscountPercentage,omitempty"`
-	Status                    *string  `json:"status,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	SKU         *string `json:"sku,omitempty"`
+	HSNCode     *string `json:"hsnCode,omitempty"`
+	Status      *string `json:"status,omitempty"`
 }
 
 type UpdatePartnerInventoryItemInput struct {
@@ -2573,7 +2567,7 @@ func (s *Store) GetPartnerBrandItems(firmID, brandID string) ([]PartnerCatalogIt
 	ctx := context.Background()
 	rows, err := s.pool.Query(ctx, `
 		select c.id, c.brand_id, c.name, coalesce(c.description, ''), coalesce(c.hsn_code, ''), c.sku,
-		       coalesce(c.default_mrp, 0), coalesce(c.default_discount_percentage, 0)::float8, c.status,
+		       c.status,
 		       to_char(c.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		from partner_product_catalog c
 		join partner_firm_brands fb on fb.brand_id = c.brand_id and fb.firm_id = $1::bigint
@@ -2595,8 +2589,6 @@ func (s *Store) GetPartnerBrandItems(firmID, brandID string) ([]PartnerCatalogIt
 			&item.Description,
 			&item.HSNCode,
 			&item.SKU,
-			&item.DefaultMRP,
-			&item.DefaultDiscountPercentage,
 			&item.Status,
 			&item.UpdatedAt,
 		); err != nil {
@@ -2616,8 +2608,6 @@ func (s *Store) CreatePartnerBrandItem(firmID, brandID string, input CreatePartn
 	description := strings.TrimSpace(input.Description)
 	sku := strings.TrimSpace(input.SKU)
 	hsnCode := strings.TrimSpace(input.HSNCode)
-	defaultMRP := input.DefaultMRP
-	defaultDiscountPercentage := input.DefaultDiscountPercentage
 	status := strings.ToUpper(strings.TrimSpace(input.Status))
 	if status == "" {
 		status = "ACTIVE"
@@ -2641,12 +2631,6 @@ func (s *Store) CreatePartnerBrandItem(firmID, brandID string, input CreatePartn
 	if sku == "" {
 		return PartnerCatalogItem{}, fmt.Errorf("sku is required")
 	}
-	if defaultMRP <= 0 {
-		return PartnerCatalogItem{}, fmt.Errorf("defaultMrp must be greater than zero")
-	}
-	if defaultDiscountPercentage < 0 || defaultDiscountPercentage > 100 {
-		return PartnerCatalogItem{}, fmt.Errorf("Default Buy Margin must be between 0 and 100")
-	}
 	if hsnCode != "" && !regexp.MustCompile(`^\d+$`).MatchString(hsnCode) {
 		return PartnerCatalogItem{}, fmt.Errorf("hsnCode must contain digits only")
 	}
@@ -2666,21 +2650,19 @@ func (s *Store) CreatePartnerBrandItem(firmID, brandID string, input CreatePartn
 	var item PartnerCatalogItem
 	if err := s.pool.QueryRow(ctx, `
 		insert into partner_product_catalog (
-			id, brand_id, name, description, hsn_code, sku, default_mrp, default_discount_percentage, status
+			id, brand_id, name, description, hsn_code, sku, status
 		)
-		values ($1, $2, $3, nullif($4, ''), nullif($5, ''), $6, $7, $8, $9)
+		values ($1, $2, $3, nullif($4, ''), nullif($5, ''), $6, $7)
 		returning id, brand_id, name, coalesce(description, ''), coalesce(hsn_code, ''), sku,
-		          default_mrp, default_discount_percentage::float8, status,
+		          status,
 		          to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
-	`, id, brandID, name, description, hsnCode, sku, defaultMRP, defaultDiscountPercentage, status).Scan(
+	`, id, brandID, name, description, hsnCode, sku, status).Scan(
 		&item.ID,
 		&item.BrandID,
 		&item.Name,
 		&item.Description,
 		&item.HSNCode,
 		&item.SKU,
-		&item.DefaultMRP,
-		&item.DefaultDiscountPercentage,
 		&item.Status,
 		&item.UpdatedAt,
 	); err != nil {
@@ -2694,7 +2676,7 @@ func (s *Store) UpdatePartnerBrandItem(firmID, brandID, itemID string, patch Upd
 	var current PartnerCatalogItem
 	err := s.pool.QueryRow(ctx, `
 		select c.id, c.brand_id, c.name, coalesce(c.description, ''), coalesce(c.hsn_code, ''), c.sku,
-		       coalesce(c.default_mrp, 0), coalesce(c.default_discount_percentage, 0)::float8, c.status,
+		       c.status,
 		       to_char(c.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		from partner_product_catalog c
 		join partner_firm_brands fb on fb.brand_id = c.brand_id and fb.firm_id = $1::bigint
@@ -2706,8 +2688,6 @@ func (s *Store) UpdatePartnerBrandItem(firmID, brandID, itemID string, patch Upd
 		&current.Description,
 		&current.HSNCode,
 		&current.SKU,
-		&current.DefaultMRP,
-		&current.DefaultDiscountPercentage,
 		&current.Status,
 		&current.UpdatedAt,
 	)
@@ -2730,12 +2710,6 @@ func (s *Store) UpdatePartnerBrandItem(firmID, brandID, itemID string, patch Upd
 	if patch.HSNCode != nil {
 		current.HSNCode = strings.TrimSpace(*patch.HSNCode)
 	}
-	if patch.DefaultMRP != nil {
-		current.DefaultMRP = *patch.DefaultMRP
-	}
-	if patch.DefaultDiscountPercentage != nil {
-		current.DefaultDiscountPercentage = *patch.DefaultDiscountPercentage
-	}
 	if patch.Status != nil {
 		status := strings.ToUpper(strings.TrimSpace(*patch.Status))
 		if status != "ACTIVE" && status != "INACTIVE" {
@@ -2746,24 +2720,16 @@ func (s *Store) UpdatePartnerBrandItem(firmID, brandID, itemID string, patch Upd
 	if current.HSNCode != "" && !regexp.MustCompile(`^\d+$`).MatchString(current.HSNCode) {
 		return PartnerCatalogItem{}, fmt.Errorf("hsnCode must contain digits only")
 	}
-	if current.DefaultMRP <= 0 {
-		return PartnerCatalogItem{}, fmt.Errorf("defaultMrp must be greater than zero")
-	}
-	if current.DefaultDiscountPercentage < 0 || current.DefaultDiscountPercentage > 100 {
-		return PartnerCatalogItem{}, fmt.Errorf("Default Buy Margin must be between 0 and 100")
-	}
 
 	if _, err := s.pool.Exec(ctx, `
 		update partner_product_catalog
 		set name = $2,
 		    description = nullif($3, ''),
 		    hsn_code = nullif($4, ''),
-		    default_mrp = $5,
-		    default_discount_percentage = $6,
-		    status = $7,
+		    status = $5,
 		    updated_at = now()
 		where id = $1
-	`, itemID, current.Name, current.Description, current.HSNCode, current.DefaultMRP, current.DefaultDiscountPercentage, current.Status); err != nil {
+	`, itemID, current.Name, current.Description, current.HSNCode, current.Status); err != nil {
 		return PartnerCatalogItem{}, err
 	}
 
@@ -4591,19 +4557,19 @@ func (s *Store) CreatePartnerOrder(firmID string, input CreatePartnerOrderInput)
 		var item PartnerCatalogItem
 		err := tx.QueryRow(ctx, `
 			select c.id, c.brand_id, c.name, coalesce(c.description, ''), coalesce(c.hsn_code, ''), c.sku,
-			       coalesce(c.default_mrp, 0), coalesce(c.default_discount_percentage, 0)::float8, c.status,
+			       c.status,
 			       to_char(c.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 			from partner_product_catalog c
 			join partner_firm_brands fb on fb.brand_id = c.brand_id and fb.firm_id = $1::bigint
 			where c.id = $2
-		`, firmID, line.ItemID).Scan(&item.ID, &item.BrandID, &item.Name, &item.Description, &item.HSNCode, &item.SKU, &item.DefaultMRP, &item.DefaultDiscountPercentage, &item.Status, &item.UpdatedAt)
+		`, firmID, line.ItemID).Scan(&item.ID, &item.BrandID, &item.Name, &item.Description, &item.HSNCode, &item.SKU, &item.Status, &item.UpdatedAt)
 		if err != nil {
 			return PartnerOrder{}, err
 		}
 		if item.Status != "ACTIVE" {
 			return PartnerOrder{}, fmt.Errorf("item %s is inactive", item.Name)
 		}
-		sellerMarginPercentage, err := resolveSellerMarginPercentage(input.SellerMarginPercentage, item.DefaultDiscountPercentage)
+		sellerMarginPercentage, err := resolveSellerMarginPercentage(input.SellerMarginPercentage, 0)
 		if err != nil {
 			return PartnerOrder{}, err
 		}
@@ -4614,13 +4580,13 @@ func (s *Store) CreatePartnerOrder(firmID string, input CreatePartnerOrderInput)
 				requested_quantity, mrp, discount_percentage
 			)
 			values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		`, requestedLineID, firmID, orderID, item.BrandID, item.ID, item.SKU, item.Name, "", line.Quantity, item.DefaultMRP, sellerMarginPercentage); err != nil {
+		`, requestedLineID, firmID, orderID, item.BrandID, item.ID, item.SKU, item.Name, "", line.Quantity, 0, sellerMarginPercentage); err != nil {
 			return PartnerOrder{}, err
 		}
 		if _, err := tx.Exec(ctx, `
 			insert into partner_order_items (id, firm_id, order_id, item_id, item_code, item_name, unit, quantity, mrp, discount_percentage)
 			values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		`, nextID("poitem"), firmID, orderID, item.ID, item.SKU, item.Name, "", line.Quantity, item.DefaultMRP, sellerMarginPercentage); err != nil {
+		`, nextID("poitem"), firmID, orderID, item.ID, item.SKU, item.Name, "", line.Quantity, 0, sellerMarginPercentage); err != nil {
 			return PartnerOrder{}, err
 		}
 	}
@@ -4691,19 +4657,19 @@ func (s *Store) UpdatePartnerOrder(firmID, orderID string, input UpdatePartnerOr
 		var item PartnerCatalogItem
 		err := s.pool.QueryRow(context.Background(), `
 			select c.id, c.brand_id, c.name, coalesce(c.description, ''), coalesce(c.hsn_code, ''), c.sku,
-			       coalesce(c.default_mrp, 0), coalesce(c.default_discount_percentage, 0)::float8, c.status,
+			       c.status,
 			       to_char(c.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 			from partner_product_catalog c
 			join partner_firm_brands fb on fb.brand_id = c.brand_id and fb.firm_id = $1::bigint
 			where c.id = $2
-		`, firmID, itemID).Scan(&item.ID, &item.BrandID, &item.Name, &item.Description, &item.HSNCode, &item.SKU, &item.DefaultMRP, &item.DefaultDiscountPercentage, &item.Status, &item.UpdatedAt)
+		`, firmID, itemID).Scan(&item.ID, &item.BrandID, &item.Name, &item.Description, &item.HSNCode, &item.SKU, &item.Status, &item.UpdatedAt)
 		if err != nil {
 			return PartnerOrder{}, err
 		}
 		if item.Status != "ACTIVE" {
 			return PartnerOrder{}, fmt.Errorf("item %s is inactive", item.Name)
 		}
-		sellerMarginPercentage, err := resolveSellerMarginPercentage(input.SellerMarginPercentage, item.DefaultDiscountPercentage)
+		sellerMarginPercentage, err := resolveSellerMarginPercentage(input.SellerMarginPercentage, 0)
 		if err != nil {
 			return PartnerOrder{}, err
 		}
@@ -4713,7 +4679,7 @@ func (s *Store) UpdatePartnerOrder(firmID, orderID string, input UpdatePartnerOr
 			ItemName:           item.Name,
 			Unit:               "",
 			Quantity:           line.Quantity,
-			MRP:                float64(item.DefaultMRP),
+			MRP:                0,
 			DiscountPercentage: sellerMarginPercentage,
 		})
 	}
@@ -7881,14 +7847,13 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 			}
 		}
 		if inventoryItemID == "" {
-			var defaultMRP int
-			var defaultDiscount float64
+			var catalogItemID string
 			if err := tx.QueryRow(ctx, `
-				select c.default_mrp, c.default_discount_percentage::float8
+				select c.id
 				from partner_product_catalog c
 				join partner_firm_brands fb on fb.brand_id = c.brand_id
 				where fb.firm_id = $1::bigint and c.id = $2 and c.status = 'ACTIVE'
-			`, firmID, line.ItemID).Scan(&defaultMRP, &defaultDiscount); err != nil {
+			`, firmID, line.ItemID).Scan(&catalogItemID); err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
 					return PartnerPurchase{}, fmt.Errorf("catalog item not found for %s", line.ItemName)
 				}
@@ -7899,7 +7864,7 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 				from partner_firm_inventory_items
 				where firm_id = $1::bigint and catalog_item_id = $2 and mrp = $3 and discount_percentage = $4
 				limit 1
-			`, firmID, line.ItemID, defaultMRP, defaultDiscount).Scan(&inventoryItemID); err != nil {
+			`, firmID, line.ItemID, 0, 0).Scan(&inventoryItemID); err != nil {
 				if !errors.Is(err, pgx.ErrNoRows) {
 					return PartnerPurchase{}, err
 				}
@@ -7910,7 +7875,7 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 					insert into partner_firm_inventory_items (
 						item_id, firm_id, catalog_item_id, mrp, discount_percentage, status, quantity
 					) values ($1, $2, $3, $4, $5, 'ACTIVE', 0)
-				`, inventoryItemID, firmID, line.ItemID, defaultMRP, defaultDiscount); err != nil {
+				`, inventoryItemID, firmID, line.ItemID, 0, 0); err != nil {
 					return PartnerPurchase{}, err
 				}
 			}

@@ -19,8 +19,6 @@ type Props = {
     name: string;
     description?: string;
     hsnCode?: string;
-    defaultMrp?: number;
-    defaultDiscountPercentage?: number;
     status?: "ACTIVE" | "INACTIVE";
   }) => Promise<void>;
 };
@@ -30,8 +28,6 @@ type FormState = {
   description: string;
   sku: string;
   hsnCode: string;
-  defaultMrp: string;
-  defaultDiscountPercentage: string;
   status: "ACTIVE" | "INACTIVE";
 };
 
@@ -41,20 +37,12 @@ function emptyForm(): FormState {
     description: "",
     sku: "",
     hsnCode: "",
-    defaultMrp: "",
-    defaultDiscountPercentage: "",
     status: "ACTIVE",
   };
 }
 
 function digitsOnly(value: string) {
   return value.replace(/\D+/g, "");
-}
-
-function decimalNumberOnly(value: string) {
-  const cleaned = value.replace(/[^\d.]/g, "");
-  const [integerPart, ...decimalParts] = cleaned.split(".");
-  return decimalParts.length > 0 ? `${integerPart}.${decimalParts.join("")}` : integerPart;
 }
 
 export function EditItemDrawer({ open, item, onClose, onSubmit }: Props) {
@@ -77,9 +65,6 @@ export function EditItemDrawer({ open, item, onClose, onSubmit }: Props) {
       description: item.description ?? "",
       sku: item.sku ?? "",
       hsnCode: item.hsnCode ?? "",
-      defaultMrp: item.defaultMrp ? String(item.defaultMrp) : "",
-      defaultDiscountPercentage:
-        item.defaultDiscountPercentage != null ? String(item.defaultDiscountPercentage) : "",
       status: item.status ?? "ACTIVE",
     });
     setErrors({});
@@ -200,55 +185,6 @@ export function EditItemDrawer({ open, item, onClose, onSubmit }: Props) {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <PartnerFieldLabel className="mb-2 text-sm font-semibold text-slate-800">Default MRP</PartnerFieldLabel>
-                <Input
-                  ref={(node) => {
-                    refs.current.defaultMrp = node;
-                  }}
-                  value={form.defaultMrp}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  className={["h-12 rounded-2xl bg-white text-[15px]", withErrorStyle("defaultMrp")].join(" ")}
-                  onChange={(event) => {
-                    const next = digitsOnly(event.target.value);
-                    setForm((prev) => ({ ...prev, defaultMrp: next }));
-                    setErrors((prev) => {
-                      if (!prev.defaultMrp) return prev;
-                      const copy = { ...prev };
-                      delete copy.defaultMrp;
-                      return copy;
-                    });
-                  }}
-                />
-                {errors.defaultMrp ? <FormMessage>{errors.defaultMrp}</FormMessage> : null}
-              </div>
-              <div>
-                <PartnerFieldLabel className="mb-2 text-sm font-semibold text-slate-800">Default Buy Margin %</PartnerFieldLabel>
-                <Input
-                  ref={(node) => {
-                    refs.current.defaultDiscountPercentage = node;
-                  }}
-                  value={form.defaultDiscountPercentage}
-                  inputMode="decimal"
-                  pattern="[0-9]*[.]?[0-9]*"
-                  className={["h-12 rounded-2xl bg-white text-[15px]", withErrorStyle("defaultDiscountPercentage")].join(" ")}
-                  onChange={(event) => {
-                    const next = decimalNumberOnly(event.target.value);
-                    setForm((prev) => ({ ...prev, defaultDiscountPercentage: next }));
-                    setErrors((prev) => {
-                      if (!prev.defaultDiscountPercentage) return prev;
-                      const copy = { ...prev };
-                      delete copy.defaultDiscountPercentage;
-                      return copy;
-                    });
-                  }}
-                />
-                {errors.defaultDiscountPercentage ? <FormMessage>{errors.defaultDiscountPercentage}</FormMessage> : null}
-              </div>
-            </div>
-
             <div>
               <PartnerFieldLabel className="mb-2 text-sm font-semibold text-slate-800">Status</PartnerFieldLabel>
               <Select
@@ -265,7 +201,7 @@ export function EditItemDrawer({ open, item, onClose, onSubmit }: Props) {
             </div>
 
             <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-              Catalog stores product identity and fallback buying terms used when purchase orders are created.
+              Catalog stores product identity used across orders, stock, and documents.
             </p>
             </CardContent>
           </Card>
@@ -284,20 +220,12 @@ export function EditItemDrawer({ open, item, onClose, onSubmit }: Props) {
               onClick={async () => {
                 const nextErrors: Record<string, string> = {};
                 const name = form.name.trim();
-                const defaultMrp = Number.parseInt(form.defaultMrp, 10);
-                const defaultDiscountPercentage = Number.parseFloat(form.defaultDiscountPercentage || "0");
 
                 if (form.hsnCode.trim() && !/^\d+$/.test(form.hsnCode.trim())) {
                   nextErrors.hsnCode = "HSN code must contain digits only.";
                 }
                 if (!name) {
                   nextErrors.name = "Item name is required.";
-                }
-                if (!Number.isInteger(defaultMrp) || defaultMrp <= 0) {
-                  nextErrors.defaultMrp = "Default MRP must be a non-zero integer.";
-                }
-                if (!Number.isFinite(defaultDiscountPercentage) || defaultDiscountPercentage < 0 || defaultDiscountPercentage > 100) {
-                  nextErrors.defaultDiscountPercentage = "Default Buy Margin must be between 0 and 100.";
                 }
 
                 if (Object.keys(nextErrors).length > 0) {
@@ -313,8 +241,6 @@ export function EditItemDrawer({ open, item, onClose, onSubmit }: Props) {
                     name,
                     description: form.description.trim() || undefined,
                     hsnCode: form.hsnCode.trim() || undefined,
-                    defaultMrp,
-                    defaultDiscountPercentage,
                     status: form.status,
                   });
                   onClose();

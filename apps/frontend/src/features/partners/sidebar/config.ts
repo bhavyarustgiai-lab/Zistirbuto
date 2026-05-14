@@ -45,26 +45,26 @@ export const partnerSidebarSections: PartnerSidebarSection[] = [
     ],
   },
   {
-    label: "Parties",
+    label: "Supply",
     items: [
       { to: "/partners/suppliers", label: "Suppliers", icon: Truck },
-      { to: "/partners/clients", label: "Clients", icon: UsersRound },
+      { to: "/partners/purchases", label: "Purchases", icon: ClipboardList },
+      { to: "/partners/history", label: "Purchase History", icon: History },
     ],
   },
   {
     label: "Stock",
     items: [
       { to: "/partners/stock", label: "Inventory", icon: Warehouse },
-      { to: "/partners/purchases", label: "Purchases", icon: ClipboardList },
-      { to: "/partners/history", label: "History", icon: History },
     ],
   },
   {
-    label: "Orders",
+    label: "Sales",
     items: [
-      { to: "/partners/orders", label: "Active", icon: ShoppingCart },
-      { to: "/partners/backorders", label: "Backorders", icon: PackageSearch },
-      { to: "/partners/order-history", label: "History", icon: History },
+      { to: "/partners/clients", label: "Clients", icon: UsersRound },
+      { to: "/partners/orders", label: "Active Orders", icon: ShoppingCart },
+      { to: "/partners/backorders", label: "Back Orders", icon: PackageSearch },
+      { to: "/partners/order-history", label: "Order History", icon: History },
     ],
   },
   {

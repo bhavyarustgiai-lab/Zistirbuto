@@ -37,35 +37,6 @@ func RegisterRoutes(mux *http.ServeMux, prefix string, st *store.Store, otpServi
 	mux.HandleFunc("PATCH "+prefix+"/auth/profile", h.updateAuthProfile)
 	mux.HandleFunc("POST "+prefix+"/auth/logout", h.logout)
 	mux.HandleFunc("GET "+prefix+"/me", h.getMe)
-	mux.HandleFunc("POST "+prefix+"/entities", h.createEntity)
-
-	mux.HandleFunc("GET "+prefix+"/members", h.getMembers)
-	mux.HandleFunc("DELETE "+prefix+"/members/{userId}", h.removeMember)
-
-	mux.HandleFunc("GET "+prefix+"/invites", h.getInvites)
-	mux.HandleFunc("POST "+prefix+"/invites", h.createInvite)
-	mux.HandleFunc("POST "+prefix+"/invites/accept", h.acceptInvite)
-	mux.HandleFunc("POST "+prefix+"/invites/{inviteId}/revoke", h.revokeInvite)
-
-	mux.HandleFunc("GET "+prefix+"/services", h.getServices)
-	mux.HandleFunc("POST "+prefix+"/services", h.createService)
-	mux.HandleFunc("PATCH "+prefix+"/services/{id}", h.updateService)
-	mux.HandleFunc("DELETE "+prefix+"/services/{id}", h.deleteService)
-
-	mux.HandleFunc("GET "+prefix+"/service-categories", h.getServiceCategories)
-	mux.HandleFunc("POST "+prefix+"/service-categories", h.createServiceCategory)
-	mux.HandleFunc("PATCH "+prefix+"/service-categories/{id}", h.updateServiceCategory)
-	mux.HandleFunc("DELETE "+prefix+"/service-categories/{id}", h.deleteServiceCategory)
-
-	mux.HandleFunc("GET "+prefix+"/staff-capabilities", h.getStaffCapabilities)
-	mux.HandleFunc("PUT "+prefix+"/staff-capabilities/{userId}", h.updateStaffCapabilities)
-
-	mux.HandleFunc("GET "+prefix+"/day-entries", h.getDayEntries)
-	mux.HandleFunc("POST "+prefix+"/day-entries", h.createDayEntry)
-	mux.HandleFunc("PATCH "+prefix+"/day-entries/{id}", h.updateDayEntry)
-	mux.HandleFunc("DELETE "+prefix+"/day-entries/{id}", h.deleteDayEntry)
-
-	mux.HandleFunc("POST "+prefix+"/payments", h.createPayment)
 
 	mux.HandleFunc("GET "+prefix+"/partners/me", h.getPartnersMe)
 	mux.HandleFunc("POST "+prefix+"/partners/firms", h.createPartnerFirm)
@@ -272,16 +243,17 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {
-	st, ok := h.authedStore(w, r)
-	if !ok {
+	token := h.sessionTokenFromRequest(r)
+	if token == "" {
+		unauthorized(w, "authentication required")
 		return
 	}
-	res, err := st.GetMe()
+	user, err := h.store.UserBySessionToken(token)
 	if err != nil {
-		internalError(w, err)
+		unauthorized(w, "authentication required")
 		return
 	}
-	writeJSON(w, http.StatusOK, res)
+	writeJSON(w, http.StatusOK, map[string]any{"user": user})
 }
 
 func (h *Handler) createEntity(w http.ResponseWriter, r *http.Request) {

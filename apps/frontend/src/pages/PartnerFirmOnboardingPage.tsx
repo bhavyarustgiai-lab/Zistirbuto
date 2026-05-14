@@ -15,7 +15,11 @@ export function PartnerFirmOnboardingPage() {
     <section className="grid gap-4">
       <Card className="border-brand-100 bg-gradient-to-br from-white via-white to-indigo-50">
         <CardHeader className="p-5 sm:p-6">
-          <CardTitle>{partnerFirms.length === 0 ? "Create your distributor firm" : "Add another firm"}</CardTitle>
+          <CardTitle>
+            {partnerFirms.length === 0
+              ? "Create your distributor firm"
+              : "Add another firm"}
+          </CardTitle>
         </CardHeader>
         <CardContent className="px-5 pt-0 pb-5 text-sm text-slate-600 sm:px-6 sm:pb-6">
           {partnerFirms.length === 0
@@ -27,7 +31,7 @@ export function PartnerFirmOnboardingPage() {
       <FirmProfileForm
         title="Firm onboarding"
         description="Capture the primary business, tax, billing, and contact details for this distributor firm."
-        submitLabel={partnerFirms.length === 0 ? "Create firm and continue" : "Create firm"}
+        submitLabel={"Create firm"}
         saving={saving}
         onSubmit={async (values) => {
           setSaving(true);

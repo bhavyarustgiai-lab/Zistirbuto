@@ -64,8 +64,6 @@ export const PartnerCatalogItemSchema = z.object({
   description: z.string().optional().or(z.literal("")),
   hsnCode: z.string().optional().or(z.literal("")),
   sku: z.string().min(1),
-  defaultMrp: z.number().int().nonnegative(),
-  defaultDiscountPercentage: z.number().min(0).max(100),
   status: z.enum(["ACTIVE", "INACTIVE"]),
   updatedAt: z.string().datetime().optional(),
 });

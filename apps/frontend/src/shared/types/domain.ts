@@ -156,8 +156,6 @@ export type PartnerCatalogItem = {
   description?: string;
   hsnCode?: string;
   sku: string;
-  defaultMrp: number;
-  defaultDiscountPercentage: number;
   status: "ACTIVE" | "INACTIVE";
   updatedAt: string;
 };
