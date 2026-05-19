@@ -197,7 +197,7 @@ export type PartnerPaymentMode = "CASH" | "UPI" | "BANK_TRANSFER" | "CHEQUE" | "
 export type PartnerSupplierInvoiceStatus = "DRAFT" | "FINALIZED" | "CANCELLED";
 export type PartnerPayableStatus = "UNPAID" | "PARTIALLY_PAID" | "PAID" | "OVERDUE";
 export type PartnerSupplierStatus = "ACTIVE" | "INACTIVE";
-export type PartnerPurchaseStatus = "DRAFT" | "ORDERED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "CANCELLED";
+export type PartnerPurchaseStatus = "DRAFT" | "PLACED" | "COMPLETED" | "CANCELLED";
 export type PartnerStockReasonType =
   | "OPENING_STOCK"
   | "PURCHASE"
@@ -212,6 +212,7 @@ export type PartnerStockReferenceType =
   | "ORDER"
   | "MANUAL"
   | "RETURN"
+  | "SUPPLIER_RETURN"
   | "DAMAGE";
 export type PartnerReceivableStatus = "CURRENT" | "OVERDUE";
 export type PartnerReceivablesFilterStatus = "ALL" | "OUTSTANDING" | "OVERDUE";
@@ -323,8 +324,11 @@ export type PartnerInventoryItem = {
   sku: string;
   mrp: number;
   discountPercentage: number;
+  taxPercentage: number;
   status: "ACTIVE" | "INACTIVE";
   quantity: number;
+  reservedQuantity?: number;
+  availableQuantity?: number;
   updatedAt: string;
   lastSupplierId?: string;
   lastSupplierName?: string;
@@ -769,9 +773,7 @@ export type PartnerPurchase = {
   supplierId: string;
   supplierName: string;
   supplierInvoiceNumber?: string;
-  supplierInvoiceDate?: string;
   purchaseDate: string;
-  expectedInwardDate?: string;
   status: PartnerPurchaseStatus;
   createdAt?: string;
   createdByName?: string;
@@ -1050,6 +1052,59 @@ export type PartnerStockActionInput = {
   invoiceId?: string;
   purchaseId?: string;
   damageCategory?: PartnerDamageCategory;
+};
+
+export type PartnerSupplierReturnStatus = "PLACED" | "COMPLETED" | "CANCELLED";
+export type PartnerSupplierReturnReason =
+  | "DAMAGED"
+  | "WRONG_ITEM"
+  | "EXPIRED"
+  | "EXCESS_STOCK"
+  | "OTHER";
+
+export type PartnerSupplierReturnItem = {
+  id: string;
+  supplierReturnId: string;
+  itemId: string;
+  itemName: string;
+  sku?: string;
+  mrp: number;
+  discountPercentage: number;
+  taxPercentage: number;
+  quantity: number;
+  reason: PartnerSupplierReturnReason;
+  note?: string;
+};
+
+export type PartnerSupplierReturn = {
+  id: string;
+  firmId: number;
+  returnNumber: string;
+  supplierId: string;
+  supplierName: string;
+  brandId: number;
+  brandName: string;
+  returnDate: string;
+  status: PartnerSupplierReturnStatus;
+  note?: string;
+  createdAt: string;
+  createdByName?: string;
+  lineCount: number;
+  totalQuantity: number;
+  items: PartnerSupplierReturnItem[];
+};
+
+export type CreatePartnerSupplierReturnInput = {
+  supplierId: string;
+  brandId: number | string;
+  returnDate: string;
+  note?: string;
+  items: Array<{
+    itemId: string;
+    quantity: number;
+    reason: PartnerSupplierReturnReason;
+    note?: string;
+  }>;
 };
 
 export type PartnerInventoryUpdateInput = {

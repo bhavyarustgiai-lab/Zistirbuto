@@ -1,9 +1,13 @@
 import { useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Plus, RotateCcw, Search } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useAppState } from "@app/providers/AppStateProvider";
-import { usePartnerBrands, usePartnerCatalogItems, usePartnerPurchases, usePartnerSuppliers } from "@entities/partners/hooks";
-import { CreatePurchaseOrderDialog } from "@features/partners/purchases/components/CreatePurchaseOrderDialog";
+import { usePartnerBrandItems, usePartnerBrands, usePartnerPurchases } from "@entities/partners/hooks";
+import { PartnerBrandSelector } from "@features/partners/brands/PartnerBrandSelector";
+import { usePartnerBrandSelection } from "@features/partners/brands/usePartnerBrandSelection";
+import { CancelPurchaseDialog } from "@features/partners/purchases/components/CancelPurchaseDialog";
 import { GoodsReceiptDialog } from "@features/partners/purchases/components/GoodsReceiptDialog";
+import { PurchaseDateRangePicker } from "@features/partners/purchases/components/PurchaseDateRangePicker";
 import { PurchaseOrderTable } from "@features/partners/purchases/components/PurchaseOrderTable";
 import {
   PartnersPageFilters,
@@ -13,46 +17,70 @@ import {
 } from "@features/partners/layout/PartnersPageLayout";
 import { Button } from "@components/ui/button";
 import { Input } from "@components/ui/input";
-import { Select } from "@components/ui/select";
 import { EmptyState } from "@shared/ui/molecules/empty-state";
 import { ErrorState } from "@shared/ui/molecules/error-state";
 import { LoadingState } from "@shared/ui/molecules/loading-state";
+import { todayISO } from "@shared/lib/date";
 import type { PartnerPurchase } from "@shared/types/domain";
 
-const statusOptions = [
-  { value: "ALL", label: "All statuses" },
+const viewOptions = [
   { value: "DRAFT", label: "Draft" },
-  { value: "ORDERED", label: "Ordered" },
-  { value: "PARTIALLY_RECEIVED", label: "Partially received" },
-  { value: "RECEIVED", label: "Received" },
+  { value: "PLACED", label: "Placed" },
+  { value: "COMPLETED", label: "Completed" },
   { value: "CANCELLED", label: "Cancelled" },
 ];
 
+const openViews = new Set(["DRAFT", "PLACED"]);
+
+function offsetDateISO(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
 export function PartnerPurchasesPage() {
   const { activePartnerFirmId } = useAppState();
+  const navigate = useNavigate();
   const purchases = usePartnerPurchases(activePartnerFirmId);
-  const suppliers = usePartnerSuppliers(activePartnerFirmId, "");
   const brands = usePartnerBrands(activePartnerFirmId);
-  const catalog = usePartnerCatalogItems(activePartnerFirmId, brands.items.map((brand) => brand.id));
+  const { brandId, brandOptions, setBrandId } = usePartnerBrandSelection(
+    activePartnerFirmId,
+    brands.items,
+  );
+  const catalog = usePartnerBrandItems(activePartnerFirmId, brandId);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("ALL");
-  const [showCreate, setShowCreate] = useState(false);
+  const [view, setView] = useState("DRAFT");
+  const [fromDate, setFromDate] = useState(offsetDateISO(-90));
+  const [toDate, setToDate] = useState(todayISO());
   const [receivingPurchase, setReceivingPurchase] = useState<PartnerPurchase | null>(null);
+  const [cancellingPurchase, setCancellingPurchase] = useState<PartnerPurchase | null>(null);
   const [mutating, setMutating] = useState(false);
   const [actionError, setActionError] = useState("");
+
+  const selectedCatalogItemIds = useMemo(
+    () => new Set(catalog.items.map((item) => item.id)),
+    [catalog.items],
+  );
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return purchases.items.filter((purchase) => {
-      const matchesStatus = status === "ALL" || purchase.status === status;
+      const matchesBrand =
+        !brandId ||
+        purchase.items.some((item) => selectedCatalogItemIds.has(item.itemId));
+      const matchesStatus = purchase.status === view;
+      const matchesDate =
+        openViews.has(view) ||
+        ((!fromDate || purchase.purchaseDate >= fromDate) &&
+          (!toDate || purchase.purchaseDate <= toDate));
       const matchesSearch =
         !term ||
-        [purchase.purchaseNumber, purchase.supplierName, purchase.supplierInvoiceNumber ?? "", purchase.status].some((value) =>
+        [purchase.purchaseNumber, purchase.supplierName, purchase.supplierInvoiceNumber ?? ""].some((value) =>
           value.toLowerCase().includes(term),
         );
-      return matchesStatus && matchesSearch;
+      return matchesBrand && matchesStatus && matchesDate && matchesSearch;
     });
-  }, [purchases.items, search, status]);
+  }, [brandId, fromDate, purchases.items, search, selectedCatalogItemIds, toDate, view]);
 
   if (!activePartnerFirmId) {
     return <EmptyState>Select a firm to view purchases.</EmptyState>;
@@ -62,27 +90,67 @@ export function PartnerPurchasesPage() {
     <PartnersPageShell>
       <PartnersPageHeader
         title="Purchases"
-        description="Create purchase orders, track expected inward, and receive stock through GRNs."
+        description="Create purchase orders and receive stock through GRNs."
         actions={
-          <Button className="h-11 w-full px-4 text-sm sm:w-auto" onClick={() => setShowCreate(true)}>
-            <Plus className="mr-1 h-4 w-4" />
-            Create PO
-          </Button>
+          <PartnerBrandSelector value={brandId} onValueChange={setBrandId} options={brandOptions} />
         }
       />
 
-      <PartnersPageFilters className="md:grid-cols-[minmax(0,1fr)_220px]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {viewOptions.map((option) => (
+            <Button
+              key={option.value}
+              variant={view === option.value ? "default" : "outline"}
+              className="h-10 px-4 text-sm"
+              onClick={() => setView(option.value)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <Button
+            className="h-11 w-full px-4 text-sm sm:w-auto"
+            disabled={!brandId}
+            onClick={() => navigate(`/partners/supply/purchases/new?brand=${encodeURIComponent(brandId)}`)}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            Create PO
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11 w-full px-4 text-sm sm:w-auto"
+            disabled={!brandId}
+            onClick={() => navigate(`/partners/supply/supplier-returns?brand=${encodeURIComponent(brandId)}`)}
+          >
+            <RotateCcw className="mr-1 h-4 w-4" />
+            Returns
+          </Button>
+        </div>
+      </div>
+
+      <PartnersPageFilters className={openViews.has(view) ? "md:grid-cols-[minmax(0,1fr)]" : "md:grid-cols-[minmax(0,1fr)_320px]"}>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
-          <Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Search PO, supplier, invoice, or status" />
+          <Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Search PO, supplier, or invoice" />
         </div>
-        <Select value={status} onValueChange={setStatus} options={statusOptions} />
+        {!openViews.has(view) ? (
+          <PurchaseDateRangePicker
+            fromDate={fromDate}
+            toDate={toDate}
+            onChange={(range) => {
+              setFromDate(range.fromDate);
+              setToDate(range.toDate);
+            }}
+          />
+        ) : null}
       </PartnersPageFilters>
 
       {actionError ? <ErrorState title="Action failed" message={actionError} onRetry={() => setActionError("")} /> : null}
 
       <PartnersTableCard>
-        {purchases.isLoading ? (
+        {purchases.isLoading || catalog.loading ? (
           <LoadingState label="Loading purchases..." />
         ) : purchases.error ? (
           <div className="p-6">
@@ -112,27 +180,29 @@ export function PartnerPurchasesPage() {
                 setMutating(false);
               }
             }}
-            onCancel={async (purchaseId) => {
-              setMutating(true);
-              setActionError("");
-              try {
-                await purchases.cancel(purchaseId);
-              } catch (err) {
-                setActionError(err instanceof Error ? err.message : "Something went wrong, please try again later");
-              } finally {
-                setMutating(false);
-              }
-            }}
+            onCancel={setCancellingPurchase}
           />
         )}
       </PartnersTableCard>
 
-      <CreatePurchaseOrderDialog
-        open={showCreate}
-        suppliers={suppliers.items}
-        catalogItems={catalog.items}
-        onClose={() => setShowCreate(false)}
-        onSubmit={purchases.create}
+      <CancelPurchaseDialog
+        open={Boolean(cancellingPurchase)}
+        purchase={cancellingPurchase}
+        loading={mutating}
+        onClose={() => setCancellingPurchase(null)}
+        onCancel={async (input) => {
+          if (!cancellingPurchase) return;
+          setMutating(true);
+          setActionError("");
+          try {
+            await purchases.cancel(cancellingPurchase.id, input);
+            setCancellingPurchase(null);
+          } catch (err) {
+            setActionError(err instanceof Error ? err.message : "Something went wrong, please try again later");
+          } finally {
+            setMutating(false);
+          }
+        }}
       />
 
       <GoodsReceiptDialog

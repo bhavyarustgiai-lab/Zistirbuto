@@ -5,15 +5,17 @@ import { Input } from "@components/ui/input";
 import { Select } from "@components/ui/select";
 import { Textarea } from "@components/ui/textarea";
 import { PartnerFieldLabel } from "@features/partners/PartnerFieldLabel";
-import type { PartnerPaymentMode, PartnerSupplierInvoice } from "@shared/types/domain";
+import type { PartnerPaymentMode, PartnerSupplier, PartnerSupplierInvoice } from "@shared/types/domain";
 import { formatMoney, supplierPaymentModeOptions } from "../utils";
 
 type Props = {
   open: boolean;
   invoice: PartnerSupplierInvoice | null;
+  suppliers?: PartnerSupplier[];
   onClose: () => void;
   onSubmit: (input: {
-    supplierInvoiceId: string;
+    supplierInvoiceId?: string;
+    supplierId?: string;
     paymentDate: string;
     amount: number;
     paymentMode: PartnerPaymentMode;
@@ -22,7 +24,8 @@ type Props = {
   }) => Promise<void>;
 };
 
-export function SupplierPaymentDialog({ open, invoice, onClose, onSubmit }: Props) {
+export function SupplierPaymentDialog({ open, invoice, suppliers = [], onClose, onSubmit }: Props) {
+  const [supplierId, setSupplierId] = useState("");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
   const [amount, setAmount] = useState("");
   const [paymentMode, setPaymentMode] = useState<PartnerPaymentMode>("BANK_TRANSFER");
@@ -33,26 +36,42 @@ export function SupplierPaymentDialog({ open, invoice, onClose, onSubmit }: Prop
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!open || !invoice) return;
+    if (!open) return;
+    setSupplierId(invoice?.supplierId ?? suppliers.find((supplier) => supplier.status === "ACTIVE")?.id ?? "");
     setPaymentDate(new Date().toISOString().slice(0, 10));
-    setAmount(String(invoice.outstandingAmount || ""));
+    setAmount(invoice ? String(invoice.outstandingAmount || "") : "");
     setPaymentMode("BANK_TRANSFER");
     setReferenceNumber("");
     setNotes("");
     setFieldErrors({});
     setFormError("");
     setSaving(false);
-  }, [open, invoice]);
+  }, [invoice, open, suppliers]);
 
-  if (!invoice) return null;
+  const supplierOptions = suppliers
+    .filter((supplier) => supplier.status === "ACTIVE")
+    .map((supplier) => ({ value: supplier.id, label: supplier.supplierName }));
 
   return (
-    <Dialog open={open} onClose={onClose} title={`Record payment for ${invoice.invoiceNumber}`}>
+    <Dialog open={open} onClose={onClose} title={invoice ? `Record payment for ${invoice.invoiceNumber}` : "Record supplier payment"}>
       <div className="grid gap-4">
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          Outstanding: <span className="font-semibold text-slate-950">{formatMoney(invoice.outstandingAmount)}</span>
+          {invoice ? (
+            <>
+              Outstanding: <span className="font-semibold text-slate-950">{formatMoney(invoice.outstandingAmount)}</span>
+            </>
+          ) : (
+            "This records an advance/unallocated supplier payment. It remains separate from purchase orders and can be reconciled from supplier finance later."
+          )}
         </div>
         <div className="grid gap-3 md:grid-cols-2">
+          {!invoice ? (
+            <div className="md:col-span-2">
+              <PartnerFieldLabel>Supplier</PartnerFieldLabel>
+              <Select value={supplierId} onValueChange={setSupplierId} options={supplierOptions} searchable searchPlaceholder="Search suppliers..." />
+              {fieldErrors.supplierId ? <p className="mt-1 text-xs text-rose-600">{fieldErrors.supplierId}</p> : null}
+            </div>
+          ) : null}
           <div>
             <PartnerFieldLabel>Payment date</PartnerFieldLabel>
             <Input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} />
@@ -85,16 +104,18 @@ export function SupplierPaymentDialog({ open, invoice, onClose, onSubmit }: Prop
             onClick={async () => {
               const parsedAmount = Number.parseFloat(amount || "0");
               const nextErrors: Record<string, string> = {};
+              if (!invoice && !supplierId) nextErrors.supplierId = "Supplier is required.";
               if (!paymentDate) nextErrors.paymentDate = "Payment date is required.";
               if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) nextErrors.amount = "Amount must be greater than zero.";
-              if (parsedAmount > invoice.outstandingAmount) nextErrors.amount = "Amount cannot exceed outstanding.";
+              if (invoice && parsedAmount > invoice.outstandingAmount) nextErrors.amount = "Amount cannot exceed outstanding.";
               setFieldErrors(nextErrors);
               if (Object.keys(nextErrors).length > 0) return;
               setSaving(true);
               setFormError("");
               try {
                 await onSubmit({
-                  supplierInvoiceId: invoice.id,
+                  supplierInvoiceId: invoice?.id,
+                  supplierId: invoice?.supplierId ?? supplierId,
                   paymentDate,
                   amount: parsedAmount,
                   paymentMode,

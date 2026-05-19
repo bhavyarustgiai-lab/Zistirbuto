@@ -243,7 +243,7 @@ export function PartnerOrderDetailPage() {
         busy={busy}
         canEdit={canEdit}
         canPack={canPackCurrentOrder}
-        onBack={() => navigate("/partners/orders")}
+        onBack={() => navigate("/partners/sales/orders")}
         onEdit={() => setShowEditDrawer(true)}
         onRevertToDraft={() => setShowRevertDialog(true)}
         onCancel={() => setShowCancelDialog(true)}

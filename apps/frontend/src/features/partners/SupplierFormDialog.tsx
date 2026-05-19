@@ -63,7 +63,7 @@ export function SupplierFormDialog({ open, supplier, onClose, onValidateGSTIN, o
       <div className="grid gap-3">
         <div className="grid gap-2 md:grid-cols-2">
           <div>
-            <PartnerFieldLabel>Supplier name</PartnerFieldLabel>
+            <PartnerFieldLabel>Business name</PartnerFieldLabel>
             <Input
               value={form.supplierName}
               onChange={(event) => {
@@ -102,7 +102,7 @@ export function SupplierFormDialog({ open, supplier, onClose, onValidateGSTIN, o
             />
             {gstinError ? <p className="pt-1 text-xs text-rose-600">{gstinError}</p> : null}
             {!gstinError && gstinValidation?.exists ? (
-              <p className="pt-1 text-xs text-amber-700">This GSTIN already exists under supplier {gstinValidation.supplierName}.</p>
+              <p className="pt-1 text-xs text-amber-700">This GSTIN already exists under business {gstinValidation.supplierName}.</p>
             ) : null}
           </div>
           {supplier ? (
@@ -142,11 +142,11 @@ export function SupplierFormDialog({ open, supplier, onClose, onValidateGSTIN, o
             disabled={saving}
             onClick={async () => {
               if (!form.supplierName.trim()) {
-                setSupplierNameError("Supplier name is required.");
+                setSupplierNameError("Business name is required.");
                 return;
               }
               if (gstinValidation?.exists) {
-                setGSTINError(`This GSTIN already exists under supplier ${gstinValidation.supplierName}.`);
+                setGSTINError(`This GSTIN already exists under business ${gstinValidation.supplierName}.`);
                 return;
               }
               if (form.gstin.trim() && !isValidGSTIN(form.gstin)) {
@@ -181,7 +181,7 @@ export function SupplierFormDialog({ open, supplier, onClose, onValidateGSTIN, o
                   setGSTINError(message);
                 } else if (normalizedMessage.includes("phone")) {
                   setPhoneError(message);
-                } else if (normalizedMessage.includes("suppliername") || normalizedMessage.includes("supplier name")) {
+                } else if (normalizedMessage.includes("suppliername") || normalizedMessage.includes("supplier name") || normalizedMessage.includes("business name")) {
                   setSupplierNameError(message);
                 } else {
                   setStatusDialog({ tone: "error", title: "Supplier save failed", description: message });

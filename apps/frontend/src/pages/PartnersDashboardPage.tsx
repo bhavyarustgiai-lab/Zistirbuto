@@ -40,22 +40,22 @@ export function PartnersDashboardPage() {
   const setupSteps = [
     {
       label: "Map brands",
-      href: "/partners/brands",
+      href: "/partners/products/brands",
       done: (dashboard.data?.mappedBrandsCount ?? 0) > 0,
     },
     {
       label: "Add catalog items",
-      href: "/partners/items",
+      href: "/partners/products/catalog",
       done: (dashboard.data?.itemCount ?? 0) > 0,
     },
     {
       label: "Add clients",
-      href: "/partners/clients",
+      href: "/partners/sales/clients",
       done: (dashboard.data?.clientBusinessCount ?? 0) > 0,
     },
     {
       label: "Add suppliers",
-      href: "/partners/suppliers",
+      href: "/partners/supply/suppliers",
       done: (dashboard.data?.supplierCount ?? 0) > 0,
     },
   ];

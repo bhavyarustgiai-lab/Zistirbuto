@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Pencil, Plus } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
 import { useToast } from "@app/ToastProvider";
 import { useAppState } from "@app/providers/AppStateProvider";
 import {
@@ -13,11 +12,12 @@ import {
 } from "@entities/partners/hooks";
 import { Button } from "@components/ui/button";
 import { Input } from "@components/ui/input";
-import { Select } from "@components/ui/select";
-import { Badge } from "@components/ui/badge";
 import { EmptyState } from "@shared/ui/molecules/EmptyState";
 import { CreateItemsDrawer } from "@features/partners/CreateItemsDrawer";
 import { EditItemDrawer } from "@features/partners/EditItemDrawer";
+import { PartnerStatusBadge } from "@features/partners/PartnerStatusBadge";
+import { PartnerBrandSelector } from "@features/partners/brands/PartnerBrandSelector";
+import { usePartnerBrandSelection } from "@features/partners/brands/usePartnerBrandSelection";
 import {
   PartnersPageHeader,
   PartnersPageShell,
@@ -28,10 +28,11 @@ import type { PartnerCatalogItem } from "@shared/types/domain";
 export function PartnersItemsPage() {
   const { activePartnerFirmId } = useAppState();
   const { push } = useToast();
-  const [searchParams, setSearchParams] = useSearchParams();
   const brands = usePartnerBrands(activePartnerFirmId);
-  const queryBrandId = searchParams.get("brand") ?? "";
-  const [brandId, setBrandId] = useState("");
+  const { brandId, brandOptions, setBrandId } = usePartnerBrandSelection(
+    activePartnerFirmId,
+    brands.items,
+  );
   const [search, setSearch] = useState("");
   const [showCreateDrawer, setShowCreateDrawer] = useState(false);
   const [editingItem, setEditingItem] = useState<PartnerCatalogItem | null>(null);
@@ -44,33 +45,6 @@ export function PartnersItemsPage() {
     });
   }, [items.items, search]);
 
-  useEffect(() => {
-    if (!brands.items.length) {
-      setBrandId("");
-      return;
-    }
-    const nextBrandId =
-      queryBrandId && brands.items.some((brand) => String(brand.id) === queryBrandId)
-        ? queryBrandId
-        : brands.items[0]?.id
-          ? String(brands.items[0].id)
-          : "";
-
-    setBrandId((current) => (current === nextBrandId ? current : nextBrandId));
-    if (nextBrandId && queryBrandId !== nextBrandId) {
-      const next = new URLSearchParams(searchParams);
-      next.set("brand", nextBrandId);
-      setSearchParams(next, { replace: true });
-    }
-  }, [brands.items, queryBrandId, searchParams, setSearchParams]);
-
-  function handleBrandChange(nextBrandId: string) {
-    setBrandId(nextBrandId);
-    const next = new URLSearchParams(searchParams);
-    next.set("brand", nextBrandId);
-    setSearchParams(next, { replace: true });
-  }
-
   if (!activePartnerFirmId) {
     return <EmptyState>Select a firm to manage items.</EmptyState>;
   }
@@ -81,16 +55,7 @@ export function PartnersItemsPage() {
         title="Catalog"
         description="Manage the selected brand catalog one brand at a time."
         actions={
-          <div className="w-full sm:min-w-[280px] lg:w-[280px]">
-            <Select
-              value={brandId}
-              onValueChange={handleBrandChange}
-              options={brands.items.map((brand) => ({
-                value: String(brand.id),
-                label: brand.name,
-              }))}
-            />
-          </div>
+          <PartnerBrandSelector value={brandId} onValueChange={setBrandId} options={brandOptions} />
         }
       />
 
@@ -143,9 +108,7 @@ export function PartnersItemsPage() {
                         <p className="text-sm text-slate-700">Description: {item.description?.trim() || "-"}</p>
                         <p className="text-sm text-slate-700">HSN code: {item.hsnCode?.trim() || "-"}</p>
                         <div className="sm:col-span-2">
-                          <Badge tone={item.status === "ACTIVE" ? "active" : "inactive"}>
-                            {item.status}
-                          </Badge>
+                          <PartnerStatusBadge status={item.status} />
                         </div>
                       </div>
                     </div>
@@ -183,9 +146,7 @@ export function PartnersItemsPage() {
                         {item.hsnCode?.trim() || "-"}
                       </td>
                       <td className="px-3 py-2 align-middle text-slate-700">
-                        <Badge tone={item.status === "ACTIVE" ? "active" : "inactive"}>
-                          {item.status}
-                        </Badge>
+                        <PartnerStatusBadge status={item.status} />
                       </td>
                       <td className="px-3 py-2 align-middle">
                         <Button

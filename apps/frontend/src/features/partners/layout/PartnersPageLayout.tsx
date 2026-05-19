@@ -10,10 +10,12 @@ export function PartnersPageShell({
 }
 
 export function PartnersPageHeader({
+  eyebrow,
   title,
   description,
   actions,
 }: {
+  eyebrow?: ReactNode;
   title: string;
   description?: string;
   actions?: ReactNode;
@@ -21,6 +23,7 @@ export function PartnersPageHeader({
   return (
     <div className="flex flex-col gap-3 md:gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div className="min-w-0 space-y-1">
+        {eyebrow ? <div>{eyebrow}</div> : null}
         <h1 className="text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">{title}</h1>
         {description ? <p className="max-w-3xl text-sm leading-6 text-slate-500">{description}</p> : null}
       </div>

@@ -1,6 +1,7 @@
 import { Printer } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@components/ui/button";
+import { PartnerStatusBadge } from "@features/partners/PartnerStatusBadge";
 import { CreditNotePrintView } from "@features/partners/documents/components/CreditNotePrintView";
 import { DocumentPrintDialog } from "@features/partners/documents/components/DocumentPrintDialog";
 import { EmptyState } from "@shared/ui/molecules/empty-state";
@@ -32,19 +33,6 @@ function formatDate(value: string) {
 
 function formatItemQuantity(value: number) {
   return value.toLocaleString("en-IN");
-}
-
-function ReturnStatusTag({ status }: { status: PartnerOrderReturn["status"] }) {
-  const label = status === "ISSUED" ? "Issued" : "Voided";
-  const classes =
-    status === "ISSUED"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : "border-rose-200 bg-rose-50 text-rose-700";
-  return (
-    <span className={`inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-medium ${classes}`}>
-      {label}
-    </span>
-  );
 }
 
 export function OrderReturnsTable({ returns, voidingReturnId = "", onVoidReturn }: OrderReturnsTableProps) {
@@ -95,7 +83,7 @@ export function OrderReturnsTable({ returns, voidingReturnId = "", onVoidReturn 
                 <td className="px-3 py-3 font-medium text-slate-900">{item.creditNoteNumber || "-"}</td>
                 <td className="px-3 py-3 text-right tabular-nums">{formatCurrency(item.totalCreditAmount)}</td>
                 <td className="px-3 py-3">
-                  <ReturnStatusTag status={item.status} />
+                  <PartnerStatusBadge status={item.status} />
                 </td>
                 <td className="px-3 py-3 text-right">
                   <div className="flex justify-end gap-2">

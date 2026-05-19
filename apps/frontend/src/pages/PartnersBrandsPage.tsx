@@ -116,8 +116,8 @@ export function PartnersBrandsPage() {
           {filteredBrands.map((brand) => {
             const stockSummary = stockSummaryByBrand.get(brand.id);
             const hasStock = stockSummary != null;
-            const catalogHref = `/partners/items?brand=${encodeURIComponent(String(brand.id))}`;
-            const stockHref = `/partners/stock?brand=${encodeURIComponent(String(brand.id))}`;
+            const catalogHref = `/partners/products/catalog?brand=${encodeURIComponent(String(brand.id))}`;
+            const stockHref = `/partners/stock/inventory?brand=${encodeURIComponent(String(brand.id))}`;
 
             return (
               <div

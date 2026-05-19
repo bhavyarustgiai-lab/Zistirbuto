@@ -33,7 +33,7 @@ export function PayablesTable({ invoices, onFinalize, onRecordPayment, isMutatin
           {invoices.map((invoice) => (
             <tr key={invoice.id} className="border-b border-slate-100 text-slate-800 last:border-b-0">
               <td className="px-5 py-4">
-                <Link to={`/partners/suppliers/${invoice.supplierId}/ledger`} className="font-medium text-slate-950 hover:text-slate-700">
+                <Link to={`/partners/supply/suppliers/${invoice.supplierId}/ledger`} className="font-medium text-slate-950 hover:text-slate-700">
                   {invoice.supplierName}
                 </Link>
                 <div className="mt-1 text-xs text-slate-500">{invoice.purchaseNumber || invoice.grnNumber || "No PO/GRN link"}</div>

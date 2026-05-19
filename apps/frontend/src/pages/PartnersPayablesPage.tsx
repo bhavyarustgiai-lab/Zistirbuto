@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { CreditCard, Plus, Search } from "lucide-react";
 import { useAppState } from "@app/providers/AppStateProvider";
 import { usePartnerPayables, usePartnerSuppliers } from "@entities/partners/hooks";
 import { PayablesTable } from "@features/partners/finance/payables/components/PayablesTable";
@@ -35,6 +35,7 @@ export function PartnersPayablesPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
   const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [paymentInvoice, setPaymentInvoice] = useState<PartnerSupplierInvoice | null>(null);
   const [mutating, setMutating] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -60,10 +61,19 @@ export function PartnersPayablesPage() {
         title="Payables"
         description="Track supplier invoices, outstanding amounts, and supplier payments."
         actions={
-          <Button className="h-11 w-full px-4 text-sm sm:w-auto" onClick={() => setShowInvoiceDialog(true)}>
-            <Plus className="mr-1 h-4 w-4" />
-            Add Supplier Invoice
-          </Button>
+          <>
+            <Button variant="outline" className="h-11 w-full px-4 text-sm sm:w-auto" onClick={() => {
+              setPaymentInvoice(null);
+              setShowPaymentDialog(true);
+            }}>
+              <CreditCard className="mr-1 h-4 w-4" />
+              Record Supplier Payment
+            </Button>
+            <Button className="h-11 w-full px-4 text-sm sm:w-auto" onClick={() => setShowInvoiceDialog(true)}>
+              <Plus className="mr-1 h-4 w-4" />
+              Add Supplier Invoice
+            </Button>
+          </>
         }
       />
 
@@ -97,13 +107,16 @@ export function PartnersPayablesPage() {
           </div>
         ) : !payables.data || payables.data.invoices.length === 0 ? (
           <div className="p-8">
-            <EmptyState title="No supplier invoices yet." description="Add finalized supplier invoices to start tracking payables." />
+            <EmptyState title="No supplier invoices yet." description="Add supplier invoices for payables, or record supplier payments as advances." />
           </div>
         ) : (
           <PayablesTable
             invoices={payables.data.invoices}
             isMutating={mutating}
-            onRecordPayment={setPaymentInvoice}
+            onRecordPayment={(invoice) => {
+              setPaymentInvoice(invoice);
+              setShowPaymentDialog(true);
+            }}
             onFinalize={async (invoiceId) => {
               setMutating(true);
               setActionError("");
@@ -128,9 +141,13 @@ export function PartnersPayablesPage() {
         }}
       />
       <SupplierPaymentDialog
-        open={Boolean(paymentInvoice)}
+        open={showPaymentDialog}
         invoice={paymentInvoice}
-        onClose={() => setPaymentInvoice(null)}
+        suppliers={suppliers.items}
+        onClose={() => {
+          setShowPaymentDialog(false);
+          setPaymentInvoice(null);
+        }}
         onSubmit={async (input) => {
           await payables.recordPayment(input);
         }}

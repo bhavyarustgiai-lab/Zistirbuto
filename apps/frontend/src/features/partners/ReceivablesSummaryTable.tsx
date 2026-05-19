@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Badge } from "@components/ui/badge";
+import { PartnerStatusBadge } from "@features/partners/PartnerStatusBadge";
 import type { PartnerReceivablesSummary } from "@shared/types/domain";
 import { formatCurrency } from "@features/partners/finance/invoices/utils";
 import { PaymentStatusBadge } from "@features/partners/finance/payments/components/PaymentStatusBadge";
@@ -25,7 +25,7 @@ export function ReceivablesSummaryTable({ data }: Props) {
           <div key={invoice.invoiceId} className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <Link className="font-medium text-brand-600 hover:underline" to={`/partners/invoices/${invoice.invoiceId}`}>
+                <Link className="font-medium text-brand-600 hover:underline" to={`/partners/finance/invoices/${invoice.invoiceId}`}>
                   {invoice.invoiceNumber}
                 </Link>
                 <p className="mt-1 text-sm text-slate-600">{invoice.clientName}</p>
@@ -63,7 +63,7 @@ export function ReceivablesSummaryTable({ data }: Props) {
             {rows.map((invoice) => (
               <tr key={invoice.invoiceId} className="border-b border-slate-100 text-slate-800 hover:bg-slate-50">
                 <td className="px-3 py-3 font-medium">
-                  <Link className="text-brand-600 hover:underline" to={`/partners/invoices/${invoice.invoiceId}`}>
+                  <Link className="text-brand-600 hover:underline" to={`/partners/finance/invoices/${invoice.invoiceId}`}>
                     {invoice.invoiceNumber}
                   </Link>
                 </td>
@@ -76,9 +76,7 @@ export function ReceivablesSummaryTable({ data }: Props) {
                 <td className="px-3 py-3 text-right font-medium tabular-nums text-slate-950">{formatCurrency(invoice.outstanding)}</td>
                 <td className="px-3 py-3"><PaymentStatusBadge status={invoice.paymentStatus} /></td>
                 <td className="px-3 py-3">
-                  <Badge tone={invoice.status === "OVERDUE" ? "cancelled" : "neutral"}>
-                    {invoice.status === "OVERDUE" ? invoice.agingBucket || "0-30" : "Current"}
-                  </Badge>
+                  <PartnerStatusBadge status={invoice.status === "OVERDUE" ? "OVERDUE" : "CURRENT"} />
                 </td>
               </tr>
             ))}

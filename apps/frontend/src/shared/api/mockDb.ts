@@ -47,6 +47,7 @@ import type {
   PartnerSupplierInvoice,
   PartnerSupplierLedgerEntry,
   PartnerSupplierPayment,
+  PartnerSupplierReturn,
   PartnerStockActionInput,
   PartnerStockLedgerEntry,
   PartnerStockLedgerFilters,
@@ -408,6 +409,7 @@ let partnerFirmInventoryItems: PartnerInventoryItem[] = [
     sku: "LOR-SHAM-300",
     mrp: 690,
     discountPercentage: 10,
+    taxPercentage: 0,
     status: "ACTIVE",
     quantity: 24,
     updatedAt: new Date().toISOString(),
@@ -424,6 +426,7 @@ let partnerFirmInventoryItems: PartnerInventoryItem[] = [
     sku: "LOR-MASK-250",
     mrp: 940,
     discountPercentage: 12.5,
+    taxPercentage: 0,
     status: "ACTIVE",
     quantity: 12,
     updatedAt: new Date().toISOString(),
@@ -440,6 +443,7 @@ let partnerFirmInventoryItems: PartnerInventoryItem[] = [
     sku: "WEL-SHAM-250",
     mrp: 560,
     discountPercentage: 8,
+    taxPercentage: 0,
     status: "ACTIVE",
     quantity: 18,
     updatedAt: new Date().toISOString(),
@@ -456,6 +460,7 @@ let partnerFirmInventoryItems: PartnerInventoryItem[] = [
     sku: "LOR-SHAM-300",
     mrp: 690,
     discountPercentage: 9,
+    taxPercentage: 0,
     status: "ACTIVE",
     quantity: 9,
     updatedAt: new Date().toISOString(),
@@ -721,6 +726,8 @@ let partnerStockEntries: PartnerStockLedgerEntry[] = [
   { id: "pstock_8", firmId: 3, itemId: "pitem_9", quantityDelta: 9, reasonType: "OPENING_STOCK", note: "Initial stock", createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString() },
   { id: "pstock_9", firmId: 3, itemId: "pitem_11", quantityDelta: 14, reasonType: "OPENING_STOCK", note: "Initial stock", createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString() },
 ];
+
+let partnerSupplierReturns: PartnerSupplierReturn[] = [];
 
 let partnerOrders: PartnerOrder[] = [];
 let partnerInvoices: PartnerInvoice[] = [];
@@ -1034,7 +1041,12 @@ function hydratePartnerInvoice(invoice: PartnerInvoice): PartnerInvoice {
 
 function hydratePartnerPurchase(purchase: PartnerPurchase): PartnerPurchase {
   const rawStatus = purchase.status as string;
-  const status = rawStatus === "POSTED" ? "RECEIVED" : purchase.status;
+  const status =
+    rawStatus === "ORDERED" || rawStatus === "PARTIALLY_RECEIVED"
+      ? "PLACED"
+      : rawStatus === "POSTED" || rawStatus === "RECEIVED"
+        ? "COMPLETED"
+        : purchase.status;
   const items = purchase.items.map((item) => ({
     ...item,
     receivedQuantity: item.receivedQuantity ?? 0,
@@ -1049,7 +1061,7 @@ function hydratePartnerPurchase(purchase: PartnerPurchase): PartnerPurchase {
     receivedQuantity: items.reduce((sum, item) => sum + item.receivedQuantity, 0),
     damagedQuantity: items.reduce((sum, item) => sum + item.damagedQuantity, 0),
     totalAmount: items.reduce((sum, item) => sum + item.lineTotal, 0),
-    stockPosted: status === "RECEIVED",
+    stockPosted: items.some((item) => item.receivedQuantity > 0),
   };
 }
 
@@ -1514,10 +1526,8 @@ function seedPartnerErpData() {
       supplierId: "psup_1",
       supplierName: "Prime Beauty Supply",
       supplierInvoiceNumber: "PB-4382",
-      supplierInvoiceDate: "2026-03-08",
       purchaseDate: "2026-03-08",
-      expectedInwardDate: "2026-03-10",
-      status: "RECEIVED",
+      status: "COMPLETED",
       createdAt: "2026-03-08T09:00:00.000Z",
       createdByName: currentUser.name,
       postedAt: "2026-03-08T10:30:00.000Z",
@@ -1538,9 +1548,7 @@ function seedPartnerErpData() {
       supplierId: "psup_2",
       supplierName: "Salon Source India",
       supplierInvoiceNumber: "SSI-902",
-      supplierInvoiceDate: "2026-03-13",
       purchaseDate: "2026-03-13",
-      expectedInwardDate: "2026-03-18",
       status: "DRAFT",
       createdAt: "2026-03-13T12:00:00.000Z",
       createdByName: currentUser.name,
@@ -1560,10 +1568,8 @@ function seedPartnerErpData() {
       supplierId: "psup_3",
       supplierName: "Northern Haircare Depot",
       supplierInvoiceNumber: "NHD-2201",
-      supplierInvoiceDate: "2026-03-09",
       purchaseDate: "2026-03-09",
-      expectedInwardDate: "2026-03-12",
-      status: "RECEIVED",
+      status: "COMPLETED",
       createdAt: "2026-03-09T08:30:00.000Z",
       createdByName: currentUser.name,
       postedAt: "2026-03-09T09:00:00.000Z",
@@ -2449,7 +2455,7 @@ export const mockDb = {
               location: outlet?.outletName || "",
               status,
               impactText: status ? `Status changed to ${status.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())}` : "",
-              href: order ? `/partners/orders/${order.id}` : "",
+              href: order ? `/partners/sales/orders/${order.id}` : "",
             };
           }
 
@@ -2494,7 +2500,7 @@ export const mockDb = {
             subject: item?.name || "",
             quantityDelta: entry.quantityDelta,
             impactText: `${entry.quantityDelta > 0 ? "+" : ""}${entry.quantityDelta} units`,
-            href: "/partners/stock",
+            href: "/partners/stock/inventory",
           };
         }),
     ]
@@ -2888,6 +2894,11 @@ export const mockDb = {
       .filter((item) => item.firmId === firmId)
       .filter((item) => allowedBrands.has(item.brandId))
       .filter((item) => (brandId ? item.brandId === brandId : true))
+      .map((item) => ({
+        ...item,
+        reservedQuantity: item.reservedQuantity ?? 0,
+        availableQuantity: Math.max(item.quantity - (item.reservedQuantity ?? 0), 0),
+      }))
       .sort((a, b) => a.itemName.localeCompare(b.itemName) || a.mrp - b.mrp || a.discountPercentage - b.discountPercentage);
   },
 
@@ -2900,6 +2911,9 @@ export const mockDb = {
     if (input.quantity != null && (!Number.isInteger(input.quantity) || input.quantity < 0)) {
       throw new Error("Quantity must be a non-negative integer");
     }
+    if (input.quantity != null && input.quantity < (current.reservedQuantity ?? 0)) {
+      throw new Error("Quantity cannot be lower than reserved stock");
+    }
     if (input.status != null && input.status !== "ACTIVE" && input.status !== "INACTIVE") {
       throw new Error("Status must be ACTIVE or INACTIVE");
     }
@@ -2909,6 +2923,7 @@ export const mockDb = {
     const next: PartnerInventoryItem = {
       ...current,
       quantity: input.quantity ?? current.quantity,
+      availableQuantity: Math.max((input.quantity ?? current.quantity) - (current.reservedQuantity ?? 0), 0),
       status: input.status ?? current.status,
       updatedAt: new Date().toISOString(),
     };
@@ -3345,7 +3360,8 @@ export const mockDb = {
         const stockItem = partnerFirmInventoryItems.find((item) => item.firmId === firmId && item.itemId === line.itemId && item.status === "ACTIVE");
         if (!stockItem) throw new Error("Stock item code not found");
         if (!requiredByCatalog.has(stockItem.catalogItemId)) throw new Error("Stock item code does not belong to this order");
-        if (line.quantity > stockItem.quantity) throw new Error(`Only ${stockItem.quantity} available for ${stockItem.sku}`);
+        const stockAvailable = stockItem.availableQuantity ?? Math.max(stockItem.quantity - (stockItem.reservedQuantity ?? 0), 0);
+        if (line.quantity > stockAvailable) throw new Error(`Only ${stockAvailable} available for ${stockItem.sku}`);
         allocatedByCatalog.set(stockItem.catalogItemId, (allocatedByCatalog.get(stockItem.catalogItemId) ?? 0) + line.quantity);
         if ((allocatedByCatalog.get(stockItem.catalogItemId) ?? 0) > (requiredByCatalog.get(stockItem.catalogItemId) ?? 0)) {
           throw new Error("Allocated quantity exceeds requested quantity");
@@ -3391,6 +3407,7 @@ export const mockDb = {
         const stockItem = partnerFirmInventoryItems.find((item) => item.firmId === firmId && item.itemId === allocation.itemId);
         if (stockItem) {
           stockItem.quantity -= allocation.quantity;
+          stockItem.availableQuantity = Math.max(stockItem.quantity - (stockItem.reservedQuantity ?? 0), 0);
           stockItem.updatedAt = now;
         }
       }
@@ -4374,40 +4391,49 @@ export const mockDb = {
 
   async createPartnerSupplierPayment(
     firmId: number,
-    input: { supplierInvoiceId: string; paymentDate: string; amount: number; paymentMode: PartnerPaymentMode; referenceNumber?: string; notes?: string },
+    input: { supplierInvoiceId?: string; supplierId?: string; paymentDate: string; amount: number; paymentMode: PartnerPaymentMode; referenceNumber?: string; notes?: string },
   ) {
     await wait();
-    const rawInvoice = partnerSupplierInvoices.find((item) => item.firmId === firmId && item.id === input.supplierInvoiceId);
-    if (!rawInvoice) throw new Error("Supplier invoice not found");
-    const invoice = hydrateSupplierInvoice(rawInvoice);
-    if (invoice.status !== "FINALIZED") throw new Error("Payments can only be recorded against finalized supplier invoices");
+    const rawInvoice = input.supplierInvoiceId
+      ? partnerSupplierInvoices.find((item) => item.firmId === firmId && item.id === input.supplierInvoiceId)
+      : null;
+    if (input.supplierInvoiceId && !rawInvoice) throw new Error("Supplier invoice not found");
+    const invoice = rawInvoice ? hydrateSupplierInvoice(rawInvoice) : null;
+    if (invoice && invoice.status !== "FINALIZED") throw new Error("Payments can only be recorded against finalized supplier invoices");
+    const supplier = invoice
+      ? { id: invoice.supplierId, supplierName: invoice.supplierName }
+      : partnerSuppliers.find((item) => item.firmId === firmId && item.id === input.supplierId && item.status === "ACTIVE");
+    if (!supplier) throw new Error("Supplier not found");
     if (input.amount <= 0) throw new Error("Amount must be greater than zero");
-    if (input.amount > invoice.outstandingAmount) throw new Error("Amount cannot exceed outstanding balance");
+    if (invoice && input.amount > invoice.outstandingAmount) throw new Error("Amount cannot exceed outstanding balance");
     const paymentId = makeId("pspay");
+    const allocations = invoice
+      ? [{
+          id: makeId("pspal"),
+          paymentId,
+          supplierInvoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          invoiceDate: invoice.invoiceDate,
+          invoiceAmount: invoice.finalTotalAmount,
+          invoiceOutstanding: Math.max(invoice.outstandingAmount - input.amount, 0),
+          amount: input.amount,
+        }]
+      : [];
     const payment: PartnerSupplierPayment = {
       id: paymentId,
       firmId,
-      supplierId: invoice.supplierId,
-      supplierName: invoice.supplierName,
+      supplierId: supplier.id,
+      supplierName: supplier.supplierName,
       paymentDate: input.paymentDate,
       mode: input.paymentMode,
       referenceNumber: input.referenceNumber || "",
       createdAt: new Date().toISOString(),
       recordedByName: currentUser.name,
       amount: input.amount,
-      allocatedAmount: input.amount,
-      unallocatedAmount: 0,
+      allocatedAmount: invoice ? input.amount : 0,
+      unallocatedAmount: invoice ? 0 : input.amount,
       notes: input.notes || "",
-      allocations: [{
-        id: makeId("pspal"),
-        paymentId,
-        supplierInvoiceId: invoice.id,
-        invoiceNumber: invoice.invoiceNumber,
-        invoiceDate: invoice.invoiceDate,
-        invoiceAmount: invoice.finalTotalAmount,
-        invoiceOutstanding: Math.max(invoice.outstandingAmount - input.amount, 0),
-        amount: input.amount,
-      }],
+      allocations,
     };
     partnerSupplierPayments = [payment, ...partnerSupplierPayments];
     pushSupplierLedgerEntry({
@@ -4419,7 +4445,7 @@ export const mockDb = {
       referenceType: "SUPPLIER_PAYMENT",
       referenceId: paymentId,
       referenceNumber: input.referenceNumber || paymentId,
-      description: `Payment recorded for ${invoice.invoiceNumber}`,
+      description: invoice ? `Payment recorded for ${invoice.invoiceNumber}` : "Supplier advance payment recorded",
       debitAmount: input.amount,
       creditAmount: 0,
     });
@@ -4805,17 +4831,17 @@ export const mockDb = {
     const results: PartnerGlobalSearchResult[] = [];
     for (const business of partnerClientBusinesses.filter((item) => item.firmId === firmId)) {
       if (business.businessName.toLowerCase().includes(term)) {
-        results.push({ id: business.id, type: "CLIENT", title: business.businessName, subtitle: business.billingAddress || "", href: "/partners/clients" });
+        results.push({ id: business.id, type: "CLIENT", title: business.businessName, subtitle: business.billingAddress || "", href: "/partners/sales/clients" });
       }
     }
     for (const order of partnerOrders.filter((item) => item.firmId === firmId)) {
       if (`${order.orderNumber} ${order.clientBusinessName}`.toLowerCase().includes(term)) {
-        results.push({ id: order.id, type: "ORDER", title: order.orderNumber, subtitle: order.clientBusinessName, href: `/partners/orders/${order.id}` });
+        results.push({ id: order.id, type: "ORDER", title: order.orderNumber, subtitle: order.clientBusinessName, href: `/partners/sales/orders/${order.id}` });
       }
     }
     for (const item of partnerItems.filter((candidate) => getFirmBrandIds(firmId).includes(candidate.brandId))) {
       if (`${item.name} ${item.sku}`.toLowerCase().includes(term)) {
-        results.push({ id: item.id, type: "ITEM", title: item.name, subtitle: item.sku, href: "/partners/items" });
+        results.push({ id: item.id, type: "ITEM", title: item.name, subtitle: item.sku, href: "/partners/products/catalog" });
       }
     }
     return results.slice(0, 10);
@@ -4939,9 +4965,6 @@ export const mockDb = {
       supplierId: string;
       purchaseNumber: string;
       supplierInvoiceNumber?: string;
-      supplierInvoiceDate?: string;
-      purchaseDate: string;
-      expectedInwardDate?: string;
       notes?: string;
       items: Array<{ itemId: string; quantity: number; costPrice: number; discountPercentage?: number; taxPercentage?: number }>;
     },
@@ -4991,9 +5014,7 @@ export const mockDb = {
       supplierId: supplier.id,
       supplierName: supplier.supplierName,
       supplierInvoiceNumber: input.supplierInvoiceNumber?.trim() || "",
-      supplierInvoiceDate: input.supplierInvoiceDate?.trim() || "",
-      purchaseDate: input.purchaseDate,
-      expectedInwardDate: input.expectedInwardDate?.trim() || "",
+      purchaseDate: todayISO(),
       status: "DRAFT",
       createdAt: new Date().toISOString(),
       createdByName: currentUser.name,
@@ -5010,6 +5031,91 @@ export const mockDb = {
     return purchase;
   },
 
+  async updatePartnerPurchase(
+    firmId: number,
+    purchaseId: string,
+    input: {
+      supplierId: string;
+      supplierInvoiceNumber?: string;
+      notes?: string;
+      items: Array<{ itemId: string; quantity: number; costPrice: number; discountPercentage?: number; taxPercentage?: number }>;
+    },
+  ) {
+    await wait();
+    const purchase = partnerPurchases.find((item) => item.firmId === firmId && item.id === purchaseId);
+    if (!purchase) {
+      throw new Error("Purchase not found");
+    }
+    if (purchase.status !== "DRAFT" && purchase.status !== "PLACED") {
+      throw new Error("Only draft or placed purchases can be edited");
+    }
+    if (purchase.items.some((item) => item.receivedQuantity > 0 || item.damagedQuantity > 0)) {
+      throw new Error("Purchase with stock inward cannot be edited");
+    }
+    const supplier = getPartnerSupplierById(firmId, input.supplierId);
+    if (!supplier) {
+      throw new Error("Supplier not found");
+    }
+    if (supplier.status !== "ACTIVE") {
+      throw new Error("Supplier must be active");
+    }
+    if (!input.items.length) {
+      throw new Error("Add at least one purchase line");
+    }
+    const seen = new Set<string>();
+    const items: PartnerPurchaseItem[] = input.items.map((line) => {
+      if (seen.has(line.itemId)) {
+        throw new Error("Duplicate purchase item");
+      }
+      seen.add(line.itemId);
+      const item = partnerItems.find((candidate) => candidate.id === line.itemId);
+      if (!item) {
+        throw new Error("Purchase item not found");
+      }
+      const discount = line.discountPercentage ?? 0;
+      const tax = line.taxPercentage ?? 0;
+      return {
+        id: makeId("ppit"),
+        purchaseId,
+        itemId: item.id,
+        itemCode: item.itemCode,
+        itemName: item.name,
+        sku: item.sku,
+        quantity: line.quantity,
+        receivedQuantity: 0,
+        damagedQuantity: 0,
+        costPrice: line.costPrice,
+        discountPercentage: discount,
+        taxPercentage: tax,
+        lineTotal: line.quantity * line.costPrice * (1 - discount / 100) * (1 + tax / 100),
+      };
+    });
+    partnerPurchases = partnerPurchases.map((item) =>
+      item.id === purchaseId
+        ? hydratePartnerPurchase({
+            ...item,
+            supplierId: supplier.id,
+            supplierName: supplier.supplierName,
+            supplierInvoiceNumber: input.supplierInvoiceNumber?.trim() || "",
+            notes: input.notes?.trim() || "",
+            items,
+          })
+        : item,
+    );
+    pushPartnerAuditLog({
+      firmId,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      entityType: "PURCHASE",
+      entityId: purchaseId,
+      action: "UPDATE",
+      referenceLabel: purchase.purchaseNumber,
+      beforeState: JSON.stringify({ status: purchase.status }),
+      afterState: JSON.stringify({ supplierId: supplier.id, lineCount: items.length }),
+    });
+    return hydratePartnerPurchase(partnerPurchases.find((item) => item.id === purchaseId)!);
+  },
+
   async orderPartnerPurchase(firmId: number, purchaseId: string) {
     await wait();
     const purchase = partnerPurchases.find((item) => item.firmId === firmId && item.id === purchaseId);
@@ -5017,7 +5123,7 @@ export const mockDb = {
       throw new Error("Purchase not found");
     }
     if (purchase.status === "CANCELLED") {
-      throw new Error("Cancelled purchases cannot be ordered");
+      throw new Error("Cancelled purchases cannot be placed");
     }
     if (purchase.status !== "DRAFT") {
       return hydratePartnerPurchase(purchase);
@@ -5025,7 +5131,7 @@ export const mockDb = {
     const orderedAt = new Date().toISOString();
     partnerPurchases = partnerPurchases.map((item) =>
       item.id === purchaseId
-        ? hydratePartnerPurchase({ ...item, status: "ORDERED", orderedAt, orderedByName: currentUser.name })
+        ? hydratePartnerPurchase({ ...item, status: "PLACED", orderedAt, orderedByName: currentUser.name })
         : item,
     );
     pushPartnerAuditLog({
@@ -5037,23 +5143,36 @@ export const mockDb = {
       action: "ORDER",
       referenceLabel: purchase.purchaseNumber,
       beforeState: JSON.stringify({ status: purchase.status }),
-      afterState: JSON.stringify({ status: "ORDERED" }),
+      afterState: JSON.stringify({ status: "PLACED" }),
     });
     return hydratePartnerPurchase(partnerPurchases.find((item) => item.id === purchaseId)!);
   },
 
-  async cancelPartnerPurchase(firmId: number, purchaseId: string) {
+  async cancelPartnerPurchase(firmId: number, purchaseId: string, input: { reason: string }) {
     await wait();
+    const reason = input.reason?.trim() ?? "";
+    if (!reason) {
+      throw new Error("Cancellation reason is required");
+    }
     const purchase = partnerPurchases.find((item) => item.firmId === firmId && item.id === purchaseId);
     if (!purchase) {
       throw new Error("Purchase not found");
     }
-    if (purchase.status === "PARTIALLY_RECEIVED" || purchase.status === "RECEIVED") {
-      throw new Error("Received purchases cannot be cancelled");
+    if (purchase.status === "COMPLETED") {
+      throw new Error("Completed purchases cannot be cancelled");
+    }
+    if (purchase.status !== "DRAFT" && purchase.status !== "PLACED") {
+      throw new Error("Only draft or placed purchases can be cancelled");
     }
     partnerPurchases = partnerPurchases.map((item) =>
       item.id === purchaseId
-        ? { ...item, status: "CANCELLED", cancelledAt: new Date().toISOString(), stockPosted: false }
+        ? {
+            ...item,
+            status: "CANCELLED",
+            cancelledAt: new Date().toISOString(),
+            notes: [item.notes?.trim(), `Cancellation reason: ${reason}`].filter(Boolean).join("\n"),
+            stockPosted: false,
+          }
         : item,
     );
     return hydratePartnerPurchase(partnerPurchases.find((item) => item.id === purchaseId)!);
@@ -5078,14 +5197,14 @@ export const mockDb = {
     if (!purchase) {
       throw new Error("Purchase not found");
     }
-    if (purchase.status === "DRAFT") {
-      throw new Error("Purchase must be ordered before receiving stock");
-    }
     if (purchase.status === "CANCELLED") {
       throw new Error("Cancelled purchases cannot be received");
     }
-    if (purchase.status === "RECEIVED") {
-      throw new Error("Purchase is already fully received");
+    if (purchase.status === "COMPLETED") {
+      throw new Error("Completed purchases cannot receive more stock");
+    }
+    if (purchase.status !== "PLACED") {
+      throw new Error("Place purchase before recording stock inward");
     }
     const grnId = makeId("pgrn");
     const grnNumber = `GRN-${todayISO().replaceAll("-", "")}-${grnId.slice(-6)}`;
@@ -5103,11 +5222,56 @@ export const mockDb = {
       if (receivedQuantity + damagedQuantity > remaining) {
         throw new Error(`Received quantity exceeds remaining quantity for ${purchaseLine.itemName}`);
       }
+      const catalogItem = partnerCatalogItems.find((item) => item.id === purchaseLine.itemId);
+      if (!catalogItem) {
+        throw new Error("Catalog item not found");
+      }
+      const lotMRP = Math.round(purchaseLine.costPrice);
+      let inventoryItem = partnerFirmInventoryItems.find(
+        (item) =>
+          item.firmId === firmId &&
+          item.catalogItemId === purchaseLine.itemId &&
+          item.mrp === lotMRP &&
+          item.discountPercentage === purchaseLine.discountPercentage &&
+          item.taxPercentage === purchaseLine.taxPercentage,
+      );
+      if (!inventoryItem) {
+        inventoryItem = {
+          firmId,
+          itemId: makeId("pfi"),
+          catalogItemId: purchaseLine.itemId,
+          brandId: catalogItem.brandId,
+          itemName: purchaseLine.itemName,
+          sku: purchaseLine.sku,
+          mrp: lotMRP,
+          discountPercentage: purchaseLine.discountPercentage,
+          taxPercentage: purchaseLine.taxPercentage,
+          status: "ACTIVE",
+          quantity: 0,
+          updatedAt: new Date().toISOString(),
+          lastSupplierId: purchase.supplierId,
+          lastSupplierName: purchase.supplierName,
+          lastReceivedAt: input.receivedDate || todayISO(),
+        };
+        partnerFirmInventoryItems = [inventoryItem, ...partnerFirmInventoryItems];
+      }
       if (receivedQuantity > 0) {
+        partnerFirmInventoryItems = partnerFirmInventoryItems.map((item) =>
+          item.itemId === inventoryItem.itemId && item.firmId === firmId
+            ? {
+                ...item,
+                quantity: item.quantity + receivedQuantity,
+                updatedAt: new Date().toISOString(),
+                lastSupplierId: purchase.supplierId,
+                lastSupplierName: purchase.supplierName,
+                lastReceivedAt: input.receivedDate || todayISO(),
+              }
+            : item,
+        );
         pushPartnerStockEntry({
           id: makeId("pstock"),
           firmId,
-          itemId: purchaseLine.itemId,
+          itemId: inventoryItem.itemId,
           quantityDelta: receivedQuantity,
           reasonType: "PURCHASE",
           referenceType: "PURCHASE",
@@ -5121,7 +5285,7 @@ export const mockDb = {
         id: makeId("pgri"),
         grnId,
         purchaseItemId: purchaseLine.id,
-        itemId: purchaseLine.itemId,
+        itemId: inventoryItem.itemId,
         itemName: purchaseLine.itemName,
         sku: purchaseLine.sku,
         orderedQuantity: purchaseLine.quantity,
@@ -5157,14 +5321,12 @@ export const mockDb = {
           damagedQuantity: purchaseLine.damagedQuantity + receiptLine.damagedQuantity,
         };
       });
-      const totalOrdered = nextItems.reduce((sum, line) => sum + line.quantity, 0);
-      const totalAccounted = nextItems.reduce((sum, line) => sum + line.receivedQuantity + line.damagedQuantity, 0);
       return hydratePartnerPurchase({
         ...item,
+        status: "COMPLETED",
         items: nextItems,
-        status: totalAccounted >= totalOrdered ? "RECEIVED" : "PARTIALLY_RECEIVED",
-        postedAt: totalAccounted >= totalOrdered ? new Date().toISOString() : item.postedAt,
-        postedByName: totalAccounted >= totalOrdered ? currentUser.name : item.postedByName,
+        postedAt: item.postedAt || new Date().toISOString(),
+        postedByName: item.postedByName || currentUser.name,
       });
     });
     pushPartnerAuditLog({
@@ -5176,9 +5338,299 @@ export const mockDb = {
       action: "RECEIVE",
       referenceLabel: purchase.purchaseNumber,
       beforeState: JSON.stringify({ status: purchase.status }),
-      afterState: JSON.stringify({ grnNumber }),
+      afterState: JSON.stringify({ grnNumber, status: "COMPLETED" }),
     });
     return hydratePartnerPurchase(partnerPurchases.find((item) => item.id === purchaseId)!);
+  },
+
+  async getPartnerSupplierReturns(firmId: number, brandId: number | string = "") {
+    await wait();
+    return partnerSupplierReturns
+      .filter((item) => item.firmId === firmId)
+      .filter((item) => !brandId || String(item.brandId) === String(brandId))
+      .sort((a, b) => b.returnDate.localeCompare(a.returnDate) || b.createdAt.localeCompare(a.createdAt));
+  },
+
+  async getPartnerSupplierReturnById(firmId: number, returnId: string) {
+    await wait();
+    const existing = partnerSupplierReturns.find((item) => item.firmId === firmId && item.id === returnId);
+    if (!existing) throw new Error("Supplier return not found");
+    return existing;
+  },
+
+  async createPartnerSupplierReturn(
+    firmId: number,
+    input: {
+      supplierId: string;
+      brandId: number | string;
+      returnDate: string;
+      note?: string;
+      items: Array<{ itemId: string; quantity: number; reason: string; note?: string }>;
+    },
+  ) {
+    await wait();
+    const supplier = getPartnerSupplierById(firmId, input.supplierId);
+    if (!supplier) {
+      throw new Error("Supplier not found");
+    }
+    if (supplier.status !== "ACTIVE") {
+      throw new Error("Supplier must be active");
+    }
+    const brand = partnerBrands.find((item) => String(item.id) === String(input.brandId));
+    if (!brand) {
+      throw new Error("Brand not found");
+    }
+    if (!input.returnDate || input.items.length === 0) {
+      throw new Error("Return date and items are required");
+    }
+    const seen = new Set<string>();
+    const returnId = makeId("psret");
+    const returnItems = input.items.map((line) => {
+      const inventory = partnerFirmInventoryItems.find(
+        (item) => item.firmId === firmId && item.itemId === line.itemId && String(item.brandId) === String(input.brandId),
+      );
+      if (!inventory || inventory.status !== "ACTIVE") {
+        throw new Error("Return item not found in active stock");
+      }
+      if (seen.has(line.itemId)) {
+        throw new Error("Duplicate return item");
+      }
+      seen.add(line.itemId);
+      if (!line.quantity || line.quantity <= 0) {
+        throw new Error("Return quantity must be positive");
+      }
+      const availableQuantity = inventory.availableQuantity ?? Math.max(inventory.quantity - (inventory.reservedQuantity ?? 0), 0);
+      if (line.quantity > availableQuantity) {
+        throw new Error(`Return quantity cannot exceed available stock for ${inventory.itemName}`);
+      }
+      const reason = line.reason || "OTHER";
+      return {
+        id: makeId("psreti"),
+        supplierReturnId: returnId,
+        itemId: line.itemId,
+        itemName: inventory.itemName,
+        sku: inventory.sku,
+        mrp: inventory.mrp,
+        discountPercentage: inventory.discountPercentage,
+        taxPercentage: inventory.taxPercentage,
+        quantity: line.quantity,
+        reason,
+        note: line.note?.trim() || "",
+      };
+    });
+    const created: PartnerSupplierReturn = {
+      id: returnId,
+      firmId,
+      returnNumber: `SR-${todayISO().replaceAll("-", "")}-${returnId.slice(-6)}`,
+      supplierId: supplier.id,
+      supplierName: supplier.supplierName,
+      brandId: Number(input.brandId),
+      brandName: brand.name,
+      returnDate: input.returnDate,
+      status: "PLACED",
+      note: input.note?.trim() || "",
+      createdAt: new Date().toISOString(),
+      createdByName: currentUser.name,
+      lineCount: returnItems.length,
+      totalQuantity: returnItems.reduce((sum, item) => sum + item.quantity, 0),
+      items: returnItems,
+    };
+    for (const line of returnItems) {
+      partnerFirmInventoryItems = partnerFirmInventoryItems.map((item) =>
+        item.firmId === firmId && item.itemId === line.itemId
+          ? {
+              ...item,
+              reservedQuantity: (item.reservedQuantity ?? 0) + line.quantity,
+              availableQuantity: Math.max(item.quantity - ((item.reservedQuantity ?? 0) + line.quantity), 0),
+              updatedAt: new Date().toISOString(),
+            }
+          : item,
+      );
+    }
+    partnerSupplierReturns = [created, ...partnerSupplierReturns];
+    pushPartnerAuditLog({
+      firmId,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      entityType: "SUPPLIER_RETURN",
+      entityId: returnId,
+      action: "CREATE",
+      referenceLabel: created.returnNumber,
+      afterState: JSON.stringify({ supplierId: supplier.id, brandId: input.brandId, totalQuantity: created.totalQuantity }),
+    });
+    return created;
+  },
+
+  async updatePartnerSupplierReturn(
+    firmId: number,
+    returnId: string,
+    input: {
+      supplierId: string;
+      brandId: number | string;
+      returnDate: string;
+      note?: string;
+      items: Array<{ itemId: string; quantity: number; reason: string; note?: string }>;
+    },
+  ) {
+    await wait();
+    const existing = partnerSupplierReturns.find((item) => item.firmId === firmId && item.id === returnId);
+    if (!existing) throw new Error("Supplier return not found");
+    if (existing.status !== "PLACED") throw new Error("Only placed returns can be edited");
+    for (const line of existing.items) {
+      partnerFirmInventoryItems = partnerFirmInventoryItems.map((item) =>
+        item.firmId === firmId && item.itemId === line.itemId
+          ? {
+              ...item,
+              reservedQuantity: Math.max((item.reservedQuantity ?? 0) - line.quantity, 0),
+              availableQuantity: Math.max(item.quantity - Math.max((item.reservedQuantity ?? 0) - line.quantity, 0), 0),
+              updatedAt: new Date().toISOString(),
+            }
+          : item,
+      );
+    }
+    const supplier = getPartnerSupplierById(firmId, input.supplierId);
+    if (!supplier) throw new Error("Supplier not found");
+    if (supplier.status !== "ACTIVE") throw new Error("Supplier must be active");
+    const brand = partnerBrands.find((item) => String(item.id) === String(input.brandId));
+    if (!brand) throw new Error("Brand not found");
+    const seen = new Set<string>();
+    const returnItems = input.items.map((line) => {
+      const inventory = partnerFirmInventoryItems.find(
+        (item) => item.firmId === firmId && item.itemId === line.itemId && String(item.brandId) === String(input.brandId),
+      );
+      if (!inventory || inventory.status !== "ACTIVE") throw new Error("Return item not found in active stock");
+      if (seen.has(line.itemId)) throw new Error("Duplicate return item");
+      seen.add(line.itemId);
+      if (!line.quantity || line.quantity <= 0) throw new Error("Return quantity must be positive");
+      return {
+        id: makeId("psreti"),
+        supplierReturnId: returnId,
+        itemId: line.itemId,
+        itemName: inventory.itemName,
+        sku: inventory.sku,
+        mrp: inventory.mrp,
+        discountPercentage: inventory.discountPercentage,
+        taxPercentage: inventory.taxPercentage,
+        quantity: line.quantity,
+        reason: line.reason || "OTHER",
+        note: line.note?.trim() || "",
+      };
+    });
+    for (const line of returnItems) {
+      const inventory = partnerFirmInventoryItems.find((item) => item.firmId === firmId && item.itemId === line.itemId);
+      if (!inventory || inventory.status !== "ACTIVE") throw new Error("Return item not found in active stock");
+      const availableQuantity = inventory.availableQuantity ?? Math.max(inventory.quantity - (inventory.reservedQuantity ?? 0), 0);
+      if (line.quantity > availableQuantity) throw new Error(`Return quantity cannot exceed available stock for ${line.itemName}`);
+    }
+    const updated: PartnerSupplierReturn = {
+      ...existing,
+      supplierId: supplier.id,
+      supplierName: supplier.supplierName,
+      brandId: Number(input.brandId),
+      brandName: brand.name,
+      returnDate: input.returnDate,
+      note: input.note?.trim() || "",
+      items: returnItems,
+      lineCount: returnItems.length,
+      totalQuantity: returnItems.reduce((sum, item) => sum + item.quantity, 0),
+    };
+    for (const line of updated.items) {
+      partnerFirmInventoryItems = partnerFirmInventoryItems.map((item) =>
+        item.firmId === firmId && item.itemId === line.itemId
+          ? {
+              ...item,
+              reservedQuantity: (item.reservedQuantity ?? 0) + line.quantity,
+              availableQuantity: Math.max(item.quantity - ((item.reservedQuantity ?? 0) + line.quantity), 0),
+              updatedAt: new Date().toISOString(),
+            }
+          : item,
+      );
+    }
+    partnerSupplierReturns = partnerSupplierReturns.map((item) => (item.id === returnId ? updated : item));
+    return updated;
+  },
+
+  async cancelPartnerSupplierReturn(firmId: number, returnId: string, input: { reason: string }) {
+    await wait();
+    if (!input.reason?.trim()) throw new Error("Reason is required");
+    const existing = partnerSupplierReturns.find((item) => item.firmId === firmId && item.id === returnId);
+    if (!existing) throw new Error("Supplier return not found");
+    if (existing.status !== "PLACED") throw new Error("Only placed returns can be cancelled");
+    for (const line of existing.items) {
+      partnerFirmInventoryItems = partnerFirmInventoryItems.map((item) =>
+        item.firmId === firmId && item.itemId === line.itemId
+          ? {
+              ...item,
+              reservedQuantity: Math.max((item.reservedQuantity ?? 0) - line.quantity, 0),
+              availableQuantity: Math.max(item.quantity - Math.max((item.reservedQuantity ?? 0) - line.quantity, 0), 0),
+              updatedAt: new Date().toISOString(),
+            }
+          : item,
+      );
+    }
+    const cancelled: PartnerSupplierReturn = {
+      ...existing,
+      status: "CANCELLED",
+      note: [existing.note, `Cancelled: ${input.reason.trim()}`].filter(Boolean).join("\n"),
+    };
+    partnerSupplierReturns = partnerSupplierReturns.map((item) => (item.id === returnId ? cancelled : item));
+    return cancelled;
+  },
+
+  async completePartnerSupplierReturn(firmId: number, returnId: string) {
+    await wait();
+    const existing = partnerSupplierReturns.find((item) => item.firmId === firmId && item.id === returnId);
+    if (!existing) {
+      throw new Error("Supplier return not found");
+    }
+    if (existing.status !== "PLACED") throw new Error("Only placed returns can be completed");
+    for (const line of existing.items) {
+      const inventory = partnerFirmInventoryItems.find((item) => item.firmId === firmId && item.itemId === line.itemId);
+      if (!inventory) {
+        throw new Error("Return item not found in stock");
+      }
+      if ((inventory.reservedQuantity ?? 0) < line.quantity || inventory.quantity < line.quantity) {
+        throw new Error(`Reserved stock is not available for ${line.itemName}`);
+      }
+      partnerFirmInventoryItems = partnerFirmInventoryItems.map((item) =>
+        item.firmId === firmId && item.itemId === line.itemId
+          ? {
+              ...item,
+              quantity: item.quantity - line.quantity,
+              reservedQuantity: Math.max((item.reservedQuantity ?? 0) - line.quantity, 0),
+              availableQuantity: Math.max(item.quantity - line.quantity - Math.max((item.reservedQuantity ?? 0) - line.quantity, 0), 0),
+              updatedAt: new Date().toISOString(),
+            }
+          : item,
+      );
+      pushPartnerStockEntry({
+        id: makeId("pstock"),
+        firmId,
+        itemId: line.itemId,
+        quantityDelta: -line.quantity,
+        reasonType: "RETURN_OUT",
+        referenceType: "SUPPLIER_RETURN",
+        referenceId: returnId,
+        note: [line.reason, line.note?.trim()].filter(Boolean).join(": "),
+        createdAt: `${existing.returnDate}T00:00:00.000Z`,
+      });
+    }
+    const completed: PartnerSupplierReturn = {
+      ...existing,
+      status: "COMPLETED",
+    };
+    partnerSupplierReturns = partnerSupplierReturns.map((item) => (item.id === returnId ? completed : item));
+    pushPartnerAuditLog({
+      firmId,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      entityType: "SUPPLIER_RETURN",
+      entityId: returnId,
+      action: "COMPLETE",
+      referenceLabel: existing.returnNumber,
+      afterState: JSON.stringify({ status: "COMPLETED" }),
+    });
+    return completed;
   },
 
   async getPartnerStockLedgerByReference(firmId: number, referenceType: string, referenceId: string) {

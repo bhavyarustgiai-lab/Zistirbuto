@@ -1,5 +1,5 @@
 import { CheckCircle2, Eye, Printer } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@components/ui/button";
 import { Tooltip } from "@components/ui/tooltip";
 import { EmptyState } from "@shared/ui/molecules/empty-state";
@@ -27,6 +27,10 @@ type Props = {
   onFinalize: (invoice: PartnerInvoice) => void;
 };
 
+function isInteractiveTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement && Boolean(target.closest("a,button,input,select,textarea"));
+}
+
 export function InvoiceList({
   invoices,
   loading,
@@ -37,6 +41,8 @@ export function InvoiceList({
   onPreview,
   onFinalize,
 }: Props) {
+  const navigate = useNavigate();
+
   if (loading) return <LoadingState label="Loading invoices..." />;
   if (error) return <ErrorState message={error.message} onRetry={onRetry} />;
   if (invoices.length === 0) {
@@ -72,18 +78,33 @@ export function InvoiceList({
           {invoices.map((invoice) => {
             const canFinalizeRow = canFinalize && invoice.status === "DRAFT";
             return (
-              <tr key={invoice.id} className="border-b border-slate-100 text-slate-800 hover:bg-slate-50">
+              <tr
+                key={invoice.id}
+                className="cursor-pointer border-b border-slate-100 text-slate-800 hover:bg-slate-50"
+                role="button"
+                tabIndex={0}
+                onClick={(event) => {
+                  if (isInteractiveTarget(event.target)) return;
+                  navigate(`/partners/finance/invoices/${invoice.id}`);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  if (isInteractiveTarget(event.target)) return;
+                  event.preventDefault();
+                  navigate(`/partners/finance/invoices/${invoice.id}`);
+                }}
+              >
                 <td className="px-3 py-3 font-medium text-slate-950">
-                  <Link className="hover:text-brand-600" to={`/partners/invoices/${invoice.id}`}>
+                  <Link className="hover:text-brand-600" to={`/partners/finance/invoices/${invoice.id}`}>
                     {invoice.invoiceNumber}
                   </Link>
                 </td>
                 <td className="px-3 py-3">{formatDate(invoice.invoiceDate)}</td>
                 <td className="px-3 py-3">{invoice.clientBusinessName}</td>
                 <td className="px-3 py-3">{invoice.clientOutletName}</td>
-                <td className="px-3 py-3">
+                <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
                   {invoice.orderId ? (
-                    <Link className="text-brand-600 hover:underline" to={`/partners/orders/${invoice.orderId}`}>
+                    <Link className="text-brand-600 hover:underline" to={`/partners/sales/orders/${invoice.orderId}`}>
                       {invoice.dispatchReference || invoice.orderId}
                     </Link>
                   ) : (
@@ -101,7 +122,7 @@ export function InvoiceList({
                       <Link
                         className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100"
                         aria-label={`View invoice ${invoice.invoiceNumber}`}
-                        to={`/partners/invoices/${invoice.id}`}
+                        to={`/partners/finance/invoices/${invoice.id}`}
                       >
                         <Eye className="h-4 w-4" />
                       </Link>

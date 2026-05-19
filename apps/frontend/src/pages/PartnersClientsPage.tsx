@@ -2,13 +2,13 @@ import { Fragment, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, PencilLine, Plus, Search } from "lucide-react";
 import { useAppState } from "@app/providers/AppStateProvider";
 import { usePartnerClientBusinesses } from "@entities/partners/hooks";
-import type { PartnerClientBusiness, PartnerClientOutlet, PartnerClientStatus } from "@shared/types/domain";
-import { Badge } from "@components/ui/badge";
+import type { PartnerClientBusiness, PartnerClientOutlet } from "@shared/types/domain";
 import { Button } from "@components/ui/button";
 import { Collapsible } from "@components/ui/collapsible";
 import { Input } from "@components/ui/input";
 import { EmptyState } from "@shared/ui/molecules/EmptyState";
 import { AddClientOutletDialog } from "@features/partners/AddClientOutletDialog";
+import { PartnerStatusBadge } from "@features/partners/PartnerStatusBadge";
 import { CreateClientBusinessDialog } from "@features/partners/CreateClientBusinessDialog";
 import { EditClientBusinessDialog } from "@features/partners/EditClientBusinessDialog";
 import { EditClientOutletDialog } from "@features/partners/EditClientOutletDialog";
@@ -19,10 +19,6 @@ import {
   PartnersPageShell,
   PartnersTableCard,
 } from "@features/partners/layout/PartnersPageLayout";
-
-function getStatusTone(status: PartnerClientStatus) {
-  return status === "ACTIVE" ? "active" : "inactive";
-}
 
 function getBusinessSecondaryLine(business: PartnerClientBusiness) {
   return business.billingAddress?.trim() || "";
@@ -42,10 +38,6 @@ function getOutletContacts(outlet: PartnerClientOutlet) {
     return outlet.contacts;
   }
   return [];
-}
-
-function getDisplayStatus(status: PartnerClientStatus) {
-  return status;
 }
 
 function formatContactLines(contacts: Array<{ name: string; phone: string }>) {
@@ -231,7 +223,7 @@ export function PartnersClientsPage() {
                                 <div>
                                   <p className="text-xs uppercase tracking-wide text-slate-500">Status</p>
                                   <div className="mt-1">
-                                    <Badge tone={getStatusTone(outlet.status)}>{getDisplayStatus(outlet.status)}</Badge>
+                                    <PartnerStatusBadge status={outlet.status} />
                                   </div>
                                 </div>
                                 <div>
@@ -365,7 +357,7 @@ export function PartnersClientsPage() {
                                   )}
                                 </td>
                                 <td className="px-4 py-3.5 align-top">
-                                  <Badge tone={getStatusTone(outlet.status)}>{getDisplayStatus(outlet.status)}</Badge>
+                                  <PartnerStatusBadge status={outlet.status} />
                                 </td>
                                 <td className="px-4 py-3.5 align-top">
                                   <div className="flex flex-wrap gap-1">

@@ -42,7 +42,7 @@ export function PaymentHistoryTable({ payments, loading, error, onRetry }: Props
               <td className="px-3 py-3">{payment.clientBusinessName}</td>
               <td className="px-3 py-3">
                 {payment.allocations[0] ? (
-                  <Link className="text-brand-600 hover:underline" to={`/partners/invoices/${payment.allocations[0].invoiceId}`}>
+                  <Link className="text-brand-600 hover:underline" to={`/partners/finance/invoices/${payment.allocations[0].invoiceId}`}>
                     {payment.allocations[0].invoiceNumber}
                   </Link>
                 ) : "-"}

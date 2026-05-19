@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
 import { useAppState } from "@app/providers/AppStateProvider";
 import { usePartnerBrands, usePartnerInventoryHistory } from "@entities/partners/hooks";
+import { PartnerBrandSelector } from "@features/partners/brands/PartnerBrandSelector";
+import { usePartnerBrandSelection } from "@features/partners/brands/usePartnerBrandSelection";
 import { ExportCsvButton } from "@features/partners/ExportCsvButton";
 import {
   PartnersPageFilters,
@@ -14,7 +15,6 @@ import { EmptyState } from "@shared/ui/molecules/EmptyState";
 import { Button } from "@components/ui/button";
 import { Dialog } from "@components/ui/dialog";
 import { Input } from "@components/ui/input";
-import { Select } from "@components/ui/select";
 import { Textarea } from "@components/ui/textarea";
 import { todayISO } from "@shared/lib/date";
 import { StatusDialog } from "@shared/ui/molecules/status-dialog";
@@ -43,11 +43,13 @@ function formatQuantityDelta(value: number) {
 }
 
 export function PartnersInventoryHistoryPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
   const { activePartnerFirmId } = useAppState();
   const brands = usePartnerBrands(activePartnerFirmId);
-  const queryBrandId = searchParams.get("brand") ?? "";
-  const [selectedBrandId, setSelectedBrandId] = useState(queryBrandId);
+  const {
+    brandId: selectedBrandId,
+    brandOptions,
+    setBrandId: setSelectedBrandId,
+  } = usePartnerBrandSelection(activePartnerFirmId, brands.items);
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState(offsetDateISO(-1));
   const [toDate, setToDate] = useState(todayISO());
@@ -55,29 +57,6 @@ export function PartnersInventoryHistoryPage() {
   const [revertReason, setRevertReason] = useState("");
   const [revertSaving, setRevertSaving] = useState(false);
   const [statusDialog, setStatusDialog] = useState<{ tone: "success" | "error"; title: string; description?: string } | null>(null);
-
-  const brandOptions = useMemo(
-    () => brands.items.map((brand) => ({ value: String(brand.id), label: brand.name })),
-    [brands.items],
-  );
-
-  useEffect(() => {
-    if (selectedBrandId) {
-      return;
-    }
-    if (queryBrandId && brands.items.some((brand) => String(brand.id) === queryBrandId)) {
-      setSelectedBrandId(queryBrandId);
-      return;
-    }
-    if (brands.items.length === 0) {
-      return;
-    }
-    const fallbackBrandId = String(brands.items[0].id);
-    setSelectedBrandId(fallbackBrandId);
-    const next = new URLSearchParams(searchParams);
-    next.set("brand", fallbackBrandId);
-    setSearchParams(next, { replace: true });
-  }, [brands.items, queryBrandId, searchParams, selectedBrandId, setSearchParams]);
 
   const history = usePartnerInventoryHistory(activePartnerFirmId, {
     brandId: selectedBrandId,
@@ -111,18 +90,7 @@ export function PartnersInventoryHistoryPage() {
         title="History"
         description="Review GRN receipts and manual stock adjustments."
         actions={
-          <div className="w-full sm:min-w-[320px] lg:w-[320px]">
-            <Select
-              value={selectedBrandId}
-              onValueChange={(value) => {
-                setSelectedBrandId(value);
-                const next = new URLSearchParams(searchParams);
-                next.set("brand", value);
-                setSearchParams(next, { replace: true });
-              }}
-              options={brandOptions}
-            />
-          </div>
+          <PartnerBrandSelector value={selectedBrandId} onValueChange={setSelectedBrandId} options={brandOptions} />
         }
       />
 

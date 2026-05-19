@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ClipboardList, Pencil, Search } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAppState } from "@app/providers/AppStateProvider";
 import { usePartnerBrands, usePartnerInventory } from "@entities/partners/hooks";
+import { PartnerStatusBadge } from "@features/partners/PartnerStatusBadge";
+import { PartnerBrandSelector } from "@features/partners/brands/PartnerBrandSelector";
+import { usePartnerBrandSelection } from "@features/partners/brands/usePartnerBrandSelection";
 import { EditInventoryDrawer } from "@features/partners/EditInventoryDrawer";
 import { ExportCsvButton } from "@features/partners/ExportCsvButton";
 import {
@@ -16,7 +19,6 @@ import { Button } from "@components/ui/button";
 import { Card, CardContent } from "@components/ui/card";
 import { EmptyState } from "@shared/ui/molecules/EmptyState";
 import { Input } from "@components/ui/input";
-import { Select } from "@components/ui/select";
 
 function formatMoney(value: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -26,54 +28,18 @@ function formatMoney(value: number) {
   }).format(value);
 }
 
-function statusClassName(status: "ACTIVE" | "INACTIVE") {
-  return status === "ACTIVE"
-    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-    : "border-slate-200 bg-slate-100 text-slate-600";
-}
-
 export function PartnersStockPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
   const { activePartnerFirmId } = useAppState();
   const brands = usePartnerBrands(activePartnerFirmId);
-  const queryBrandId = searchParams.get("brand") ?? "";
-  const [selectedBrandId, setSelectedBrandId] = useState("");
+  const {
+    brandId: selectedBrandId,
+    brandOptions,
+    setBrandId: setSelectedBrandId,
+  } = usePartnerBrandSelection(activePartnerFirmId, brands.items);
   const [search, setSearch] = useState("");
   const [showEditDrawer, setShowEditDrawer] = useState(false);
   const [editingItemId, setEditingItemId] = useState("");
   const inventory = usePartnerInventory(activePartnerFirmId, selectedBrandId);
-
-  const brandOptions = useMemo(
-    () => brands.items.map((brand) => ({ value: String(brand.id), label: brand.name })),
-    [brands.items],
-  );
-
-  useEffect(() => {
-    if (!brands.items.length) {
-      setSelectedBrandId("");
-      return;
-    }
-    const nextBrandId =
-      queryBrandId && brands.items.some((brand) => String(brand.id) === queryBrandId)
-        ? queryBrandId
-        : brands.items[0]?.id
-          ? String(brands.items[0].id)
-          : "";
-
-    setSelectedBrandId((current) => (current === nextBrandId ? current : nextBrandId));
-    if (nextBrandId && queryBrandId !== nextBrandId) {
-      const next = new URLSearchParams(searchParams);
-      next.set("brand", nextBrandId);
-      setSearchParams(next, { replace: true });
-    }
-  }, [brands.items, queryBrandId, searchParams, setSearchParams]);
-
-  function handleBrandChange(nextBrandId: string) {
-    setSelectedBrandId(nextBrandId);
-    const next = new URLSearchParams(searchParams);
-    next.set("brand", nextBrandId);
-    setSearchParams(next, { replace: true });
-  }
 
   const filteredItems = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -105,9 +71,7 @@ export function PartnersStockPage() {
         title="Inventory"
         description="Track available stock by brand. Supplier inward is handled through purchases and GRNs."
         actions={
-          <div className="w-full sm:min-w-[320px] lg:w-[320px]">
-            <Select value={selectedBrandId} onValueChange={handleBrandChange} options={brandOptions} />
-          </div>
+          <PartnerBrandSelector value={selectedBrandId} onValueChange={setSelectedBrandId} options={brandOptions} />
         }
       />
 
@@ -167,7 +131,7 @@ export function PartnersStockPage() {
             Adjust stock
           </Button>
           <Link
-            to="/partners/purchases"
+            to="/partners/supply/purchases"
             className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-brand-500 px-3 text-sm font-medium text-white transition hover:bg-brand-600 sm:w-auto"
           >
             <ClipboardList className="mr-1 h-4 w-4" />
@@ -215,9 +179,7 @@ export function PartnersStockPage() {
                       <div className="font-semibold text-slate-950">{item.quantity}</div>
                     </td>
                     <td className="px-4 py-4">
-                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${statusClassName(item.status)}`}>
-                        {item.status}
-                      </span>
+                      <PartnerStatusBadge status={item.status} />
                     </td>
                     <td className="px-5 py-4 text-right">
                       <div className="flex justify-end gap-1">

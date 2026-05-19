@@ -362,8 +362,11 @@ type PartnerInventoryItem struct {
 	SKU                string  `json:"sku"`
 	MRP                int     `json:"mrp"`
 	DiscountPercentage float64 `json:"discountPercentage"`
+	TaxPercentage      float64 `json:"taxPercentage"`
 	Status             string  `json:"status"`
 	Quantity           int     `json:"quantity"`
+	ReservedQuantity   int     `json:"reservedQuantity"`
+	AvailableQuantity  int     `json:"availableQuantity"`
 	UpdatedAt          string  `json:"updatedAt"`
 	LastSupplierID     string  `json:"lastSupplierId,omitempty"`
 	LastSupplierName   string  `json:"lastSupplierName,omitempty"`
@@ -783,9 +786,7 @@ type PartnerPurchase struct {
 	SupplierID            string                `json:"supplierId"`
 	SupplierName          string                `json:"supplierName"`
 	SupplierInvoiceNumber string                `json:"supplierInvoiceNumber,omitempty"`
-	SupplierInvoiceDate   string                `json:"supplierInvoiceDate,omitempty"`
 	PurchaseDate          string                `json:"purchaseDate"`
-	ExpectedInwardDate    string                `json:"expectedInwardDate,omitempty"`
 	Status                string                `json:"status"`
 	CreatedAt             string                `json:"createdAt,omitempty"`
 	CreatedByName         string                `json:"createdByName,omitempty"`
@@ -1455,6 +1456,7 @@ type CreatePartnerSupplierInvoiceInput struct {
 
 type CreatePartnerSupplierPaymentInput struct {
 	SupplierInvoiceID string  `json:"supplierInvoiceId"`
+	SupplierID        string  `json:"supplierId,omitempty"`
 	PaymentDate       string  `json:"paymentDate"`
 	Amount            float64 `json:"amount"`
 	PaymentMode       string  `json:"paymentMode"`
@@ -1488,9 +1490,13 @@ type CreatePartnerPurchaseInput struct {
 	SupplierID            string                           `json:"supplierId"`
 	PurchaseNumber        string                           `json:"purchaseNumber"`
 	SupplierInvoiceNumber string                           `json:"supplierInvoiceNumber,omitempty"`
-	SupplierInvoiceDate   string                           `json:"supplierInvoiceDate,omitempty"`
-	PurchaseDate          string                           `json:"purchaseDate"`
-	ExpectedInwardDate    string                           `json:"expectedInwardDate,omitempty"`
+	Notes                 string                           `json:"notes,omitempty"`
+	Items                 []CreatePartnerPurchaseLineInput `json:"items"`
+}
+
+type UpdatePartnerPurchaseInput struct {
+	SupplierID            string                           `json:"supplierId"`
+	SupplierInvoiceNumber string                           `json:"supplierInvoiceNumber,omitempty"`
 	Notes                 string                           `json:"notes,omitempty"`
 	Items                 []CreatePartnerPurchaseLineInput `json:"items"`
 }
@@ -1507,6 +1513,10 @@ type ReceivePartnerPurchaseInput struct {
 	ReceivedDate string                            `json:"receivedDate"`
 	Notes        string                            `json:"notes,omitempty"`
 	Items        []ReceivePartnerPurchaseLineInput `json:"items"`
+}
+
+type CancelPartnerPurchaseInput struct {
+	Reason string `json:"reason"`
 }
 
 type CreatePartnerStockAdjustmentInput struct {
@@ -1541,6 +1551,57 @@ type CreatePartnerStockActionInput struct {
 	InvoiceID        string `json:"invoiceId,omitempty"`
 	PurchaseID       string `json:"purchaseId,omitempty"`
 	DamageCategory   string `json:"damageCategory,omitempty"`
+}
+
+type PartnerSupplierReturnItem struct {
+	ID                 string  `json:"id"`
+	SupplierReturnID   string  `json:"supplierReturnId"`
+	ItemID             string  `json:"itemId"`
+	ItemName           string  `json:"itemName"`
+	SKU                string  `json:"sku,omitempty"`
+	MRP                int     `json:"mrp"`
+	DiscountPercentage float64 `json:"discountPercentage"`
+	TaxPercentage      float64 `json:"taxPercentage"`
+	Quantity           int     `json:"quantity"`
+	Reason             string  `json:"reason"`
+	Note               string  `json:"note,omitempty"`
+}
+
+type PartnerSupplierReturn struct {
+	ID            string                      `json:"id"`
+	FirmID        string                      `json:"firmId"`
+	ReturnNumber  string                      `json:"returnNumber"`
+	SupplierID    string                      `json:"supplierId"`
+	SupplierName  string                      `json:"supplierName"`
+	BrandID       string                      `json:"brandId"`
+	BrandName     string                      `json:"brandName"`
+	ReturnDate    string                      `json:"returnDate"`
+	Status        string                      `json:"status"`
+	Note          string                      `json:"note,omitempty"`
+	CreatedAt     string                      `json:"createdAt"`
+	CreatedByName string                      `json:"createdByName,omitempty"`
+	LineCount     int                         `json:"lineCount"`
+	TotalQuantity int                         `json:"totalQuantity"`
+	Items         []PartnerSupplierReturnItem `json:"items"`
+}
+
+type CreatePartnerSupplierReturnItemInput struct {
+	ItemID   string `json:"itemId"`
+	Quantity int    `json:"quantity"`
+	Reason   string `json:"reason"`
+	Note     string `json:"note,omitempty"`
+}
+
+type CreatePartnerSupplierReturnInput struct {
+	SupplierID string                                 `json:"supplierId"`
+	BrandID    string                                 `json:"brandId"`
+	ReturnDate string                                 `json:"returnDate"`
+	Note       string                                 `json:"note,omitempty"`
+	Items      []CreatePartnerSupplierReturnItemInput `json:"items"`
+}
+
+type CancelPartnerSupplierReturnInput struct {
+	Reason string `json:"reason"`
 }
 
 type CreatePartnerCreditNoteLineInput struct {
@@ -3496,14 +3557,14 @@ func (s *Store) CreatePartnerSupplier(firmID string, input CreatePartnerSupplier
 	ctx := context.Background()
 	name := strings.TrimSpace(input.SupplierName)
 	if name == "" {
-		return PartnerSupplier{}, fmt.Errorf("supplierName is required")
+		return PartnerSupplier{}, fmt.Errorf("business name is required")
 	}
 	validation, err := s.ValidatePartnerSupplierGSTIN(firmID, input.GSTIN, "")
 	if err != nil {
 		return PartnerSupplier{}, err
 	}
 	if validation.Exists {
-		return PartnerSupplier{}, fmt.Errorf("this GSTIN already exists under supplier %s", validation.SupplierName)
+		return PartnerSupplier{}, fmt.Errorf("this GSTIN already exists under business %s", validation.SupplierName)
 	}
 	if strings.TrimSpace(input.GSTIN) != "" && !validGSTIN(input.GSTIN) {
 		return PartnerSupplier{}, fmt.Errorf("gstin must be a valid 15-character GSTIN")
@@ -3531,7 +3592,7 @@ func (s *Store) UpdatePartnerSupplier(firmID, supplierID string, input UpdatePar
 	ctx := context.Background()
 	name := strings.TrimSpace(input.SupplierName)
 	if name == "" {
-		return PartnerSupplier{}, fmt.Errorf("supplierName is required")
+		return PartnerSupplier{}, fmt.Errorf("business name is required")
 	}
 	if !validPartnerSupplierStatus(input.Status) {
 		return PartnerSupplier{}, fmt.Errorf("status must be ACTIVE or INACTIVE")
@@ -3541,7 +3602,7 @@ func (s *Store) UpdatePartnerSupplier(firmID, supplierID string, input UpdatePar
 		return PartnerSupplier{}, err
 	}
 	if validation.Exists {
-		return PartnerSupplier{}, fmt.Errorf("this GSTIN already exists under supplier %s", validation.SupplierName)
+		return PartnerSupplier{}, fmt.Errorf("this GSTIN already exists under business %s", validation.SupplierName)
 	}
 	if strings.TrimSpace(input.GSTIN) != "" && !validGSTIN(input.GSTIN) {
 		return PartnerSupplier{}, fmt.Errorf("gstin must be a valid 15-character GSTIN")
@@ -3871,9 +3932,13 @@ func (s *Store) FinalizePartnerSupplierInvoice(firmID, invoiceID string) (Partne
 func (s *Store) CreatePartnerSupplierPayment(firmID string, input CreatePartnerSupplierPaymentInput) (PartnerSupplierPayment, error) {
 	ctx := context.Background()
 	invoiceID := strings.TrimSpace(input.SupplierInvoiceID)
+	supplierID := strings.TrimSpace(input.SupplierID)
 	mode := strings.ToUpper(strings.TrimSpace(input.PaymentMode))
-	if invoiceID == "" || strings.TrimSpace(input.PaymentDate) == "" || mode == "" {
-		return PartnerSupplierPayment{}, fmt.Errorf("supplier invoice, payment date, and payment mode are required")
+	if invoiceID == "" && supplierID == "" {
+		return PartnerSupplierPayment{}, fmt.Errorf("supplier invoice or supplier is required")
+	}
+	if strings.TrimSpace(input.PaymentDate) == "" || mode == "" {
+		return PartnerSupplierPayment{}, fmt.Errorf("payment date and payment mode are required")
 	}
 	if input.Amount <= 0 {
 		return PartnerSupplierPayment{}, fmt.Errorf("amount must be greater than zero")
@@ -3888,31 +3953,49 @@ func (s *Store) CreatePartnerSupplierPayment(firmID string, input CreatePartnerS
 		return PartnerSupplierPayment{}, err
 	}
 	defer tx.Rollback(ctx)
-	var supplierID, invoiceNumber, invoiceDate, status, dueDate string
-	var finalTotal float64
-	if err := tx.QueryRow(ctx, `
-		select supplier_id, invoice_number, invoice_date::text, status, coalesce(due_date::text, ''),
-		       coalesce(nullif(final_total_amount, 0), total_amount)::float8
-		from partner_supplier_invoices
-		where firm_id = $1::bigint and id = $2
-		for update
-	`, firmID, invoiceID).Scan(&supplierID, &invoiceNumber, &invoiceDate, &status, &dueDate, &finalTotal); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return PartnerSupplierPayment{}, fmt.Errorf("supplier invoice not found")
+
+	var invoiceNumber, invoiceDate, status, dueDate string
+	var finalTotal, paid, outstanding float64
+	if invoiceID != "" {
+		if err := tx.QueryRow(ctx, `
+			select supplier_id, invoice_number, invoice_date::text, status, coalesce(due_date::text, ''),
+			       coalesce(nullif(final_total_amount, 0), total_amount)::float8
+			from partner_supplier_invoices
+			where firm_id = $1::bigint and id = $2
+			for update
+		`, firmID, invoiceID).Scan(&supplierID, &invoiceNumber, &invoiceDate, &status, &dueDate, &finalTotal); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return PartnerSupplierPayment{}, fmt.Errorf("supplier invoice not found")
+			}
+			return PartnerSupplierPayment{}, err
 		}
-		return PartnerSupplierPayment{}, err
+		if status != "FINALIZED" {
+			return PartnerSupplierPayment{}, fmt.Errorf("payments can only be recorded against finalized supplier invoices")
+		}
+		if err := tx.QueryRow(ctx, `select coalesce(sum(amount), 0)::float8 from partner_supplier_payment_allocations where firm_id = $1::bigint and supplier_invoice_id = $2`, firmID, invoiceID).Scan(&paid); err != nil {
+			return PartnerSupplierPayment{}, err
+		}
+		outstanding = math.Max(roundCurrency(finalTotal-paid), 0)
+		if roundCurrency(input.Amount) > outstanding {
+			return PartnerSupplierPayment{}, fmt.Errorf("amount cannot exceed outstanding balance")
+		}
+	} else {
+		var supplierStatus string
+		if err := tx.QueryRow(ctx, `
+			select status
+			from partner_suppliers
+			where firm_id = $1::bigint and id = $2
+		`, firmID, supplierID).Scan(&supplierStatus); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return PartnerSupplierPayment{}, fmt.Errorf("supplier not found")
+			}
+			return PartnerSupplierPayment{}, err
+		}
+		if supplierStatus != "ACTIVE" {
+			return PartnerSupplierPayment{}, fmt.Errorf("supplier must be active")
+		}
 	}
-	if status != "FINALIZED" {
-		return PartnerSupplierPayment{}, fmt.Errorf("payments can only be recorded against finalized supplier invoices")
-	}
-	var paid float64
-	if err := tx.QueryRow(ctx, `select coalesce(sum(amount), 0)::float8 from partner_supplier_payment_allocations where firm_id = $1::bigint and supplier_invoice_id = $2`, firmID, invoiceID).Scan(&paid); err != nil {
-		return PartnerSupplierPayment{}, err
-	}
-	outstanding := math.Max(roundCurrency(finalTotal-paid), 0)
-	if roundCurrency(input.Amount) > outstanding {
-		return PartnerSupplierPayment{}, fmt.Errorf("amount cannot exceed outstanding balance")
-	}
+
 	paymentID := nextID("pspay")
 	if _, err := tx.Exec(ctx, `
 		insert into partner_supplier_payments (
@@ -3921,33 +4004,41 @@ func (s *Store) CreatePartnerSupplierPayment(firmID string, input CreatePartnerS
 	`, paymentID, firmID, supplierID, strings.TrimSpace(input.PaymentDate), roundCurrency(input.Amount), mode, strings.TrimSpace(input.ReferenceNumber), strings.TrimSpace(input.Notes), s.currentUserID); err != nil {
 		return PartnerSupplierPayment{}, err
 	}
-	if _, err := tx.Exec(ctx, `
-		insert into partner_supplier_payment_allocations (id, firm_id, payment_id, supplier_invoice_id, amount)
-		values ($1, $2, $3, $4, $5)
-	`, nextID("pspal"), firmID, paymentID, invoiceID, roundCurrency(input.Amount)); err != nil {
+
+	description := "Supplier advance payment recorded"
+	if invoiceID != "" {
+		if _, err := tx.Exec(ctx, `
+			insert into partner_supplier_payment_allocations (id, firm_id, payment_id, supplier_invoice_id, amount)
+			values ($1, $2, $3, $4, $5)
+		`, nextID("pspal"), firmID, paymentID, invoiceID, roundCurrency(input.Amount)); err != nil {
+			return PartnerSupplierPayment{}, err
+		}
+		nextPaid := roundCurrency(paid + input.Amount)
+		nextStatus := partnerPayableStatus(finalTotal, nextPaid, dueDate)
+		if _, err := tx.Exec(ctx, `
+			update partner_supplier_invoices
+			set paid_amount = $3, outstanding_amount = $4, payable_status = $5, updated_at = now()
+			where firm_id = $1::bigint and id = $2
+		`, firmID, invoiceID, nextPaid, math.Max(roundCurrency(finalTotal-nextPaid), 0), nextStatus); err != nil {
+			return PartnerSupplierPayment{}, err
+		}
+		description = "Payment recorded for " + invoiceNumber
+	}
+	if err := s.insertPartnerSupplierLedgerEntryTx(ctx, tx, firmID, supplierID, input.PaymentDate, "SUPPLIER_PAYMENT", paymentID, firstNonEmpty(strings.TrimSpace(input.ReferenceNumber), paymentID), description, roundCurrency(input.Amount), 0); err != nil {
 		return PartnerSupplierPayment{}, err
 	}
-	nextPaid := roundCurrency(paid + input.Amount)
-	nextStatus := partnerPayableStatus(finalTotal, nextPaid, dueDate)
-	if _, err := tx.Exec(ctx, `
-		update partner_supplier_invoices
-		set paid_amount = $3, outstanding_amount = $4, payable_status = $5, updated_at = now()
-		where firm_id = $1::bigint and id = $2
-	`, firmID, invoiceID, nextPaid, math.Max(roundCurrency(finalTotal-nextPaid), 0), nextStatus); err != nil {
-		return PartnerSupplierPayment{}, err
-	}
-	if err := s.insertPartnerSupplierLedgerEntryTx(ctx, tx, firmID, supplierID, input.PaymentDate, "SUPPLIER_PAYMENT", paymentID, firstNonEmpty(strings.TrimSpace(input.ReferenceNumber), paymentID), "Payment recorded for "+invoiceNumber, roundCurrency(input.Amount), 0); err != nil {
-		return PartnerSupplierPayment{}, err
-	}
-	if err := s.insertPartnerAuditLogTx(ctx, tx, firmID, "SUPPLIER_INVOICE", invoiceID, "PAYMENT_RECORDED", nil, map[string]any{
-		"paymentId": paymentID,
-		"amount":    roundCurrency(input.Amount),
-	}); err != nil {
-		return PartnerSupplierPayment{}, err
+	if invoiceID != "" {
+		if err := s.insertPartnerAuditLogTx(ctx, tx, firmID, "SUPPLIER_INVOICE", invoiceID, "PAYMENT_RECORDED", nil, map[string]any{
+			"paymentId": paymentID,
+			"amount":    roundCurrency(input.Amount),
+		}); err != nil {
+			return PartnerSupplierPayment{}, err
+		}
 	}
 	if err := s.insertPartnerAuditLogTx(ctx, tx, firmID, "SUPPLIER_PAYMENT", paymentID, "CREATE", nil, map[string]any{
 		"supplierInvoiceId": invoiceID,
 		"invoiceNumber":     invoiceNumber,
+		"supplierId":        supplierID,
 		"amount":            roundCurrency(input.Amount),
 	}); err != nil {
 		return PartnerSupplierPayment{}, err
@@ -5057,9 +5148,9 @@ func (s *Store) confirmPartnerOrderTx(ctx context.Context, tx pgx.Tx, firmID, or
 		for _, line := range requestedLines {
 			remaining := line.RequestedQuantity
 			rows, err := tx.Query(ctx, `
-				select item_id, quantity
+				select item_id, greatest(quantity - reserved_quantity, 0)::int
 				from partner_firm_inventory_items
-				where firm_id = $1::bigint and catalog_item_id = $2 and status = 'ACTIVE' and quantity > 0
+				where firm_id = $1::bigint and catalog_item_id = $2 and status = 'ACTIVE' and quantity - reserved_quantity > 0
 				order by updated_at asc, item_id asc
 				for update
 			`, firmID, line.CatalogItemID)
@@ -5608,8 +5699,10 @@ func (s *Store) dispatchPartnerOrderTx(ctx context.Context, tx pgx.Tx, firmID, o
 }
 
 type partnerOrderInventoryRow struct {
-	ItemID   string
-	Quantity int
+	ItemID            string
+	Quantity          int
+	ReservedQuantity  int
+	AvailableQuantity int
 }
 
 func (s *Store) returnPartnerOrderTx(ctx context.Context, tx pgx.Tx, firmID, orderID string, lines []partnerOrderTransitionLine, quantities map[string]int, requestedStatus, note string) (string, error) {
@@ -6416,7 +6509,7 @@ func (s *Store) applyPartnerOrderInventoryDeltaTx(ctx context.Context, tx pgx.Tx
 		return nil
 	}
 	rows, err := tx.Query(ctx, `
-		select item_id, quantity
+		select item_id, quantity, reserved_quantity, greatest(quantity - reserved_quantity, 0)::int
 		from partner_firm_inventory_items
 		where firm_id = $1::bigint
 		  and (item_id = $2 or catalog_item_id = $2)
@@ -6433,7 +6526,7 @@ func (s *Store) applyPartnerOrderInventoryDeltaTx(ctx context.Context, tx pgx.Tx
 	var inventoryRows []partnerOrderInventoryRow
 	for rows.Next() {
 		var row partnerOrderInventoryRow
-		if err := rows.Scan(&row.ItemID, &row.Quantity); err != nil {
+		if err := rows.Scan(&row.ItemID, &row.Quantity, &row.ReservedQuantity, &row.AvailableQuantity); err != nil {
 			return err
 		}
 		inventoryRows = append(inventoryRows, row)
@@ -6449,7 +6542,7 @@ func (s *Store) applyPartnerOrderInventoryDeltaTx(ctx context.Context, tx pgx.Tx
 		required := -delta
 		available := 0
 		for _, row := range inventoryRows {
-			available += row.Quantity
+			available += row.AvailableQuantity
 		}
 		if available < required {
 			return fmt.Errorf("only %d available", available)
@@ -6459,7 +6552,7 @@ func (s *Store) applyPartnerOrderInventoryDeltaTx(ctx context.Context, tx pgx.Tx
 			if remaining == 0 {
 				break
 			}
-			consume := row.Quantity
+			consume := row.AvailableQuantity
 			if consume > remaining {
 				consume = remaining
 			}
@@ -7496,8 +7589,8 @@ func (s *Store) GetPartnerPurchases(firmID string) ([]PartnerPurchase, error) {
 	rows, err := s.pool.Query(ctx, `
 		select
 			p.id, p.firm_id, p.purchase_number, p.supplier_id, s.supplier_name,
-			coalesce(p.supplier_invoice_number, ''), coalesce(p.supplier_invoice_date::text, ''), p.purchase_date::text,
-			coalesce(p.expected_inward_date::text, ''), p.status, to_char(p.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), coalesce(cu.name, ''),
+			coalesce(p.supplier_invoice_number, ''), p.purchase_date::text,
+			p.status, to_char(p.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), coalesce(cu.name, ''),
 			coalesce(to_char(p.ordered_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), ''), coalesce(ou.name, ''),
 			coalesce(to_char(p.posted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), ''), coalesce(pu.name, ''),
 			coalesce(to_char(p.cancelled_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), ''), coalesce(p.notes, '')
@@ -7519,15 +7612,17 @@ func (s *Store) GetPartnerPurchases(firmID string) ([]PartnerPurchase, error) {
 		var item PartnerPurchase
 		if err := rows.Scan(
 			&item.ID, &item.FirmID, &item.PurchaseNumber, &item.SupplierID, &item.SupplierName,
-			&item.SupplierInvoiceNumber, &item.SupplierInvoiceDate, &item.PurchaseDate, &item.ExpectedInwardDate, &item.Status, &item.CreatedAt,
+			&item.SupplierInvoiceNumber, &item.PurchaseDate, &item.Status, &item.CreatedAt,
 			&item.CreatedByName, &item.OrderedAt, &item.OrderedByName, &item.PostedAt, &item.PostedByName, &item.CancelledAt, &item.Notes,
 		); err != nil {
 			return nil, err
 		}
-		if item.Status == "POSTED" {
-			item.Status = "RECEIVED"
+		if item.Status == "ORDERED" || item.Status == "PARTIALLY_RECEIVED" {
+			item.Status = "PLACED"
 		}
-		item.StockPosted = item.Status == "RECEIVED"
+		if item.Status == "POSTED" || item.Status == "RECEIVED" {
+			item.Status = "COMPLETED"
+		}
 		item.Items = []PartnerPurchaseItem{}
 		items = append(items, item)
 		indexByID[item.ID] = len(items) - 1
@@ -7568,6 +7663,7 @@ func (s *Store) GetPartnerPurchases(firmID string) ([]PartnerPurchase, error) {
 		items[idx].ReceivedQuantity += line.ReceivedQuantity
 		items[idx].DamagedQuantity += line.DamagedQuantity
 		items[idx].TotalAmount += line.LineTotal
+		items[idx].StockPosted = items[idx].ReceivedQuantity > 0
 	}
 	return items, lineRows.Err()
 }
@@ -7661,8 +7757,8 @@ func goodsReceiptIDs(items []PartnerGoodsReceipt) []string {
 
 func (s *Store) CreatePartnerPurchase(firmID string, input CreatePartnerPurchaseInput) (PartnerPurchase, error) {
 	ctx := context.Background()
-	if strings.TrimSpace(input.SupplierID) == "" || strings.TrimSpace(input.PurchaseNumber) == "" || strings.TrimSpace(input.PurchaseDate) == "" {
-		return PartnerPurchase{}, fmt.Errorf("supplierId, purchaseNumber, and purchaseDate are required")
+	if strings.TrimSpace(input.SupplierID) == "" || strings.TrimSpace(input.PurchaseNumber) == "" {
+		return PartnerPurchase{}, fmt.Errorf("supplierId and purchaseNumber are required")
 	}
 	if len(input.Items) == 0 {
 		return PartnerPurchase{}, fmt.Errorf("items are required")
@@ -7691,10 +7787,10 @@ func (s *Store) CreatePartnerPurchase(firmID string, input CreatePartnerPurchase
 	purchaseID := nextID("ppur")
 	if _, err := tx.Exec(ctx, `
 		insert into partner_purchases (
-			id, firm_id, supplier_id, purchase_number, supplier_invoice_number, supplier_invoice_date,
-			purchase_date, expected_inward_date, status, notes, created_by
-		) values ($1, $2, $3, $4, nullif($5, ''), nullif($6, '')::date, $7::date, nullif($8, '')::date, 'DRAFT', nullif($9, ''), $10)
-	`, purchaseID, firmID, input.SupplierID, strings.TrimSpace(input.PurchaseNumber), strings.TrimSpace(input.SupplierInvoiceNumber), strings.TrimSpace(input.SupplierInvoiceDate), strings.TrimSpace(input.PurchaseDate), strings.TrimSpace(input.ExpectedInwardDate), strings.TrimSpace(input.Notes), s.currentUserID); err != nil {
+			id, firm_id, supplier_id, purchase_number, supplier_invoice_number,
+			purchase_date, status, notes, created_by
+		) values ($1, $2, $3, $4, nullif($5, ''), current_date, 'DRAFT', nullif($6, ''), $7)
+	`, purchaseID, firmID, input.SupplierID, strings.TrimSpace(input.PurchaseNumber), strings.TrimSpace(input.SupplierInvoiceNumber), strings.TrimSpace(input.Notes), s.currentUserID); err != nil {
 		return PartnerPurchase{}, err
 	}
 	for _, line := range input.Items {
@@ -7741,27 +7837,151 @@ func (s *Store) CreatePartnerPurchase(firmID string, input CreatePartnerPurchase
 	return s.GetPartnerPurchaseByID(firmID, purchaseID)
 }
 
+func (s *Store) UpdatePartnerPurchase(firmID, purchaseID string, input UpdatePartnerPurchaseInput) (PartnerPurchase, error) {
+	ctx := context.Background()
+	if strings.TrimSpace(input.SupplierID) == "" {
+		return PartnerPurchase{}, fmt.Errorf("supplierId is required")
+	}
+	if len(input.Items) == 0 {
+		return PartnerPurchase{}, fmt.Errorf("items are required")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return PartnerPurchase{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var status string
+	if err := tx.QueryRow(ctx, `
+		select status
+		from partner_purchases
+		where firm_id = $1::bigint and id = $2
+		for update
+	`, firmID, purchaseID).Scan(&status); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return PartnerPurchase{}, fmt.Errorf("purchase not found")
+		}
+		return PartnerPurchase{}, err
+	}
+	if status == "ORDERED" || status == "PARTIALLY_RECEIVED" {
+		status = "PLACED"
+	}
+	if status != "DRAFT" && status != "PLACED" {
+		return PartnerPurchase{}, fmt.Errorf("only draft or placed purchases can be edited")
+	}
+	var receivedOrDamaged int
+	if err := tx.QueryRow(ctx, `
+		select coalesce(sum(received_quantity + damaged_quantity), 0)::int
+		from partner_purchase_items
+		where firm_id = $1::bigint and purchase_id = $2
+	`, firmID, purchaseID).Scan(&receivedOrDamaged); err != nil {
+		return PartnerPurchase{}, err
+	}
+	if receivedOrDamaged > 0 {
+		return PartnerPurchase{}, fmt.Errorf("purchase with stock inward cannot be edited")
+	}
+
+	var supplierStatus string
+	if err := tx.QueryRow(ctx, `
+		select status
+		from partner_suppliers
+		where firm_id = $1::bigint and id = $2
+	`, firmID, strings.TrimSpace(input.SupplierID)).Scan(&supplierStatus); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return PartnerPurchase{}, fmt.Errorf("supplier not found")
+		}
+		return PartnerPurchase{}, err
+	}
+	if supplierStatus != "ACTIVE" {
+		return PartnerPurchase{}, fmt.Errorf("supplier must be active")
+	}
+
+	if _, err := tx.Exec(ctx, `
+		update partner_purchases
+		set supplier_id = $3,
+		    supplier_invoice_number = nullif($4, ''),
+		    notes = nullif($5, ''),
+		    updated_at = now()
+		where firm_id = $1::bigint and id = $2
+	`, firmID, purchaseID, strings.TrimSpace(input.SupplierID), strings.TrimSpace(input.SupplierInvoiceNumber), strings.TrimSpace(input.Notes)); err != nil {
+		return PartnerPurchase{}, err
+	}
+	if _, err := tx.Exec(ctx, `
+		delete from partner_purchase_items
+		where firm_id = $1::bigint and purchase_id = $2
+	`, firmID, purchaseID); err != nil {
+		return PartnerPurchase{}, err
+	}
+
+	seen := map[string]bool{}
+	for _, line := range input.Items {
+		itemID := strings.TrimSpace(line.ItemID)
+		if itemID == "" || line.Quantity <= 0 || line.CostPrice < 0 {
+			return PartnerPurchase{}, fmt.Errorf("itemId, positive quantity, and valid costPrice are required")
+		}
+		if seen[itemID] {
+			return PartnerPurchase{}, fmt.Errorf("duplicate purchase item")
+		}
+		seen[itemID] = true
+		var catalogItemID, itemCode, itemName, sku string
+		err := tx.QueryRow(ctx, `
+			select c.id, c.sku, c.name, c.sku
+			from partner_product_catalog c
+			join partner_firm_brands fb on fb.brand_id = c.brand_id
+			where fb.firm_id = $1::bigint and c.id = $2 and c.status = 'ACTIVE'
+		`, firmID, itemID).Scan(&catalogItemID, &itemCode, &itemName, &sku)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return PartnerPurchase{}, fmt.Errorf("catalog item not found")
+			}
+			return PartnerPurchase{}, err
+		}
+		lineTotal := float64(line.Quantity) * line.CostPrice * (1 - line.DiscountPercentage/100) * (1 + line.TaxPercentage/100)
+		if _, err := tx.Exec(ctx, `
+			insert into partner_purchase_items (
+				id, firm_id, purchase_id, item_id, item_code, item_name, sku, quantity, cost_price, discount_percentage, tax_percentage, line_total
+			) values ($1, $2, $3, $4, $5, $6, nullif($7, ''), $8, $9, $10, $11, $12)
+		`, nextID("ppit"), firmID, purchaseID, catalogItemID, itemCode, itemName, sku, line.Quantity, line.CostPrice, line.DiscountPercentage, line.TaxPercentage, lineTotal); err != nil {
+			return PartnerPurchase{}, err
+		}
+	}
+	if err := s.insertPartnerAuditLogTx(ctx, tx, firmID, "PURCHASE", purchaseID, "UPDATE", map[string]any{"status": status}, map[string]any{
+		"supplierId": strings.TrimSpace(input.SupplierID),
+		"lineCount":  len(input.Items),
+	}); err != nil {
+		return PartnerPurchase{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return PartnerPurchase{}, err
+	}
+	return s.GetPartnerPurchaseByID(firmID, purchaseID)
+}
+
 func (s *Store) OrderPartnerPurchase(firmID, purchaseID string) (PartnerPurchase, error) {
 	ctx := context.Background()
 	purchase, err := s.GetPartnerPurchaseByID(firmID, purchaseID)
 	if err != nil {
 		return PartnerPurchase{}, err
 	}
-	if purchase.Status == "ORDERED" || purchase.Status == "PARTIALLY_RECEIVED" || purchase.Status == "RECEIVED" {
+	if purchase.Status == "ORDERED" || purchase.Status == "PARTIALLY_RECEIVED" {
+		purchase.Status = "PLACED"
+		return purchase, nil
+	}
+	if purchase.Status == "PLACED" || purchase.Status == "RECEIVED" || purchase.Status == "COMPLETED" {
 		return purchase, nil
 	}
 	if purchase.Status == "CANCELLED" {
-		return PartnerPurchase{}, fmt.Errorf("cancelled purchases cannot be ordered")
+		return PartnerPurchase{}, fmt.Errorf("cancelled purchases cannot be placed")
 	}
 	if _, err := s.pool.Exec(ctx, `
 		update partner_purchases
-		set status = 'ORDERED', ordered_at = now(), ordered_by = $3, updated_at = now()
+		set status = 'PLACED', ordered_at = now(), ordered_by = $3, updated_at = now()
 		where firm_id = $1::bigint and id = $2 and status = 'DRAFT'
 	`, firmID, purchaseID, s.currentUserID); err != nil {
 		return PartnerPurchase{}, err
 	}
 	_ = s.insertPartnerAuditLog(firmID, "PURCHASE", purchaseID, "ORDER", map[string]any{"status": purchase.Status}, map[string]any{
-		"status":         "ORDERED",
+		"status":         "PLACED",
 		"purchaseNumber": purchase.PurchaseNumber,
 	})
 	return s.GetPartnerPurchaseByID(firmID, purchaseID)
@@ -7773,14 +7993,14 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 	if err != nil {
 		return PartnerPurchase{}, err
 	}
-	if purchase.Status == "DRAFT" {
-		return PartnerPurchase{}, fmt.Errorf("purchase must be ordered before receiving stock")
-	}
 	if purchase.Status == "CANCELLED" {
 		return PartnerPurchase{}, fmt.Errorf("cancelled purchases cannot be received")
 	}
-	if purchase.Status == "RECEIVED" {
-		return PartnerPurchase{}, fmt.Errorf("purchase is already fully received")
+	if purchase.Status == "COMPLETED" || purchase.Status == "RECEIVED" {
+		return PartnerPurchase{}, fmt.Errorf("completed purchases cannot receive more stock")
+	}
+	if purchase.Status != "PLACED" && purchase.Status != "ORDERED" && purchase.Status != "PARTIALLY_RECEIVED" {
+		return PartnerPurchase{}, fmt.Errorf("place purchase before recording stock inward")
 	}
 	receivedDate := strings.TrimSpace(input.ReceivedDate)
 	if receivedDate == "" {
@@ -7837,15 +8057,9 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 			return PartnerPurchase{}, fmt.Errorf("received quantity exceeds remaining quantity for %s", line.ItemName)
 		}
 		inventoryItemID := ""
-		if err := tx.QueryRow(ctx, `
-			select item_id
-			from partner_firm_inventory_items
-			where firm_id = $1::bigint and item_id = $2
-		`, firmID, line.ItemID).Scan(&inventoryItemID); err != nil {
-			if !errors.Is(err, pgx.ErrNoRows) {
-				return PartnerPurchase{}, err
-			}
-		}
+		lotMRP := int(math.Round(line.CostPrice))
+		lotDiscount := line.DiscountPercentage
+		lotTax := line.TaxPercentage
 		if inventoryItemID == "" {
 			var catalogItemID string
 			if err := tx.QueryRow(ctx, `
@@ -7862,9 +8076,13 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 			if err := tx.QueryRow(ctx, `
 				select item_id
 				from partner_firm_inventory_items
-				where firm_id = $1::bigint and catalog_item_id = $2 and mrp = $3 and discount_percentage = $4
+				where firm_id = $1::bigint
+				  and catalog_item_id = $2
+				  and mrp = $3
+				  and discount_percentage = $4
+				  and tax_percentage = $5
 				limit 1
-			`, firmID, line.ItemID, 0, 0).Scan(&inventoryItemID); err != nil {
+			`, firmID, line.ItemID, lotMRP, lotDiscount, lotTax).Scan(&inventoryItemID); err != nil {
 				if !errors.Is(err, pgx.ErrNoRows) {
 					return PartnerPurchase{}, err
 				}
@@ -7873,9 +8091,9 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 				inventoryItemID = nextID("pfi")
 				if _, err := tx.Exec(ctx, `
 					insert into partner_firm_inventory_items (
-						item_id, firm_id, catalog_item_id, mrp, discount_percentage, status, quantity
-					) values ($1, $2, $3, $4, $5, 'ACTIVE', 0)
-				`, inventoryItemID, firmID, line.ItemID, 0, 0); err != nil {
+						item_id, firm_id, catalog_item_id, mrp, discount_percentage, tax_percentage, status, quantity
+					) values ($1, $2, $3, $4, $5, $6, 'ACTIVE', 0)
+				`, inventoryItemID, firmID, catalogItemID, lotMRP, lotDiscount, lotTax); err != nil {
 					return PartnerPurchase{}, err
 				}
 			}
@@ -7927,34 +8145,21 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 		}
 	}
 
-	var totalOrdered, totalAccounted int
-	if err := tx.QueryRow(ctx, `
-		select coalesce(sum(quantity), 0)::int,
-		       coalesce(sum(received_quantity + damaged_quantity), 0)::int
-		from partner_purchase_items
-		where firm_id = $1::bigint and purchase_id = $2
-	`, firmID, purchaseID).Scan(&totalOrdered, &totalAccounted); err != nil {
-		return PartnerPurchase{}, err
-	}
-	nextStatus := "PARTIALLY_RECEIVED"
-	if totalAccounted >= totalOrdered {
-		nextStatus = "RECEIVED"
-	}
 	if _, err := tx.Exec(ctx, `
 		update partner_purchases
-		set status = $3,
-		    posted_at = case when $3 = 'RECEIVED' then coalesce(posted_at, now()) else posted_at end,
-		    posted_by = case when $3 = 'RECEIVED' then coalesce(posted_by, $4) else posted_by end,
+		set status = 'COMPLETED',
+		    posted_at = coalesce(posted_at, now()),
+		    posted_by = coalesce(posted_by, $3),
 		    updated_at = now()
 		where firm_id = $1::bigint and id = $2
-	`, firmID, purchaseID, nextStatus, s.currentUserID); err != nil {
+	`, firmID, purchaseID, s.currentUserID); err != nil {
 		return PartnerPurchase{}, err
 	}
 	if err := s.insertPartnerAuditLogTx(ctx, tx, firmID, "PURCHASE", purchaseID, "RECEIVE", map[string]any{"status": purchase.Status}, map[string]any{
-		"status":         nextStatus,
 		"purchaseNumber": purchase.PurchaseNumber,
 		"grnNumber":      grnNumber,
 		"stockReceived":  anyReceived,
+		"status":         "COMPLETED",
 	}); err != nil {
 		return PartnerPurchase{}, err
 	}
@@ -7964,23 +8169,678 @@ func (s *Store) ReceivePartnerPurchase(firmID, purchaseID string, input ReceiveP
 	return s.GetPartnerPurchaseByID(firmID, purchaseID)
 }
 
-func (s *Store) CancelPartnerPurchase(firmID, purchaseID string) (PartnerPurchase, error) {
+func (s *Store) CancelPartnerPurchase(firmID, purchaseID string, input CancelPartnerPurchaseInput) (PartnerPurchase, error) {
 	ctx := context.Background()
 	purchase, err := s.GetPartnerPurchaseByID(firmID, purchaseID)
 	if err != nil {
 		return PartnerPurchase{}, err
 	}
-	if purchase.Status == "PARTIALLY_RECEIVED" || purchase.Status == "RECEIVED" {
-		return PartnerPurchase{}, fmt.Errorf("received purchases cannot be cancelled")
+	if purchase.Status == "COMPLETED" || purchase.Status == "RECEIVED" {
+		return PartnerPurchase{}, fmt.Errorf("completed purchases cannot be cancelled")
 	}
+	if purchase.Status != "DRAFT" && purchase.Status != "PLACED" && purchase.Status != "ORDERED" && purchase.Status != "PARTIALLY_RECEIVED" {
+		return PartnerPurchase{}, fmt.Errorf("only draft or placed purchases can be cancelled")
+	}
+	reason := strings.TrimSpace(input.Reason)
+	if reason == "" {
+		return PartnerPurchase{}, fmt.Errorf("cancellation reason is required")
+	}
+	notes := strings.TrimSpace(purchase.Notes)
+	if notes != "" {
+		notes += "\n"
+	}
+	notes += "Cancellation reason: " + reason
 	if _, err := s.pool.Exec(ctx, `
 		update partner_purchases
-		set status = 'CANCELLED', cancelled_at = now(), updated_at = now()
+		set status = 'CANCELLED', cancelled_at = now(), notes = nullif($3, ''), updated_at = now()
 		where firm_id = $1::bigint and id = $2
-	`, firmID, purchaseID); err != nil {
+	`, firmID, purchaseID, notes); err != nil {
+		return PartnerPurchase{}, err
+	}
+	if err := s.insertPartnerAuditLog(firmID, "PURCHASE", purchaseID, "CANCEL", map[string]any{"status": purchase.Status}, map[string]any{
+		"status": "CANCELLED",
+		"reason": reason,
+	}); err != nil {
 		return PartnerPurchase{}, err
 	}
 	return s.GetPartnerPurchaseByID(firmID, purchaseID)
+}
+
+func (s *Store) GetPartnerSupplierReturns(firmID, brandID string) ([]PartnerSupplierReturn, error) {
+	ctx := context.Background()
+	rows, err := s.pool.Query(ctx, `
+		select sr.id, sr.firm_id, sr.return_number, sr.supplier_id, ps.supplier_name,
+		       sr.brand_id, b.name, sr.return_date::text, sr.status, coalesce(sr.note, ''),
+		       to_char(sr.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), coalesce(u.name, ''),
+		       count(sri.id)::int, coalesce(sum(sri.quantity), 0)::int
+		from partner_supplier_returns sr
+		join partner_suppliers ps on ps.firm_id = sr.firm_id and ps.id = sr.supplier_id
+		join partner_brands b on b.id = sr.brand_id
+		left join users u on u.id = sr.created_by
+		left join partner_supplier_return_items sri on sri.firm_id = sr.firm_id and sri.supplier_return_id = sr.id
+		where sr.firm_id = $1::bigint
+		  and ($2 = '' or sr.brand_id = $2::bigint)
+		group by sr.id, sr.firm_id, sr.return_number, sr.supplier_id, ps.supplier_name,
+		         sr.brand_id, b.name, sr.return_date, sr.status, sr.note, sr.created_at, u.name
+		order by sr.return_date desc, sr.created_at desc
+	`, firmID, strings.TrimSpace(brandID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []PartnerSupplierReturn{}
+	indexByID := map[string]int{}
+	for rows.Next() {
+		var item PartnerSupplierReturn
+		if err := rows.Scan(
+			&item.ID, &item.FirmID, &item.ReturnNumber, &item.SupplierID, &item.SupplierName,
+			&item.BrandID, &item.BrandName, &item.ReturnDate, &item.Status, &item.Note,
+			&item.CreatedAt, &item.CreatedByName, &item.LineCount, &item.TotalQuantity,
+		); err != nil {
+			return nil, err
+		}
+		item.Items = []PartnerSupplierReturnItem{}
+		items = append(items, item)
+		indexByID[item.ID] = len(items) - 1
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return []PartnerSupplierReturn{}, nil
+	}
+
+	lineRows, err := s.pool.Query(ctx, `
+		select sri.id, sri.supplier_return_id, sri.item_id, sri.item_name, coalesce(sri.sku, ''),
+		       coalesce(i.mrp, 0), coalesce(i.discount_percentage, 0)::float8, coalesce(i.tax_percentage, 0)::float8,
+		       sri.quantity, sri.reason, coalesce(sri.note, '')
+		from partner_supplier_return_items sri
+		left join partner_firm_inventory_items i on i.firm_id = sri.firm_id and i.item_id = sri.item_id
+		where sri.firm_id = $1::bigint
+		  and sri.supplier_return_id = any($2)
+		order by sri.created_at asc
+	`, firmID, supplierReturnIDs(items))
+	if err != nil {
+		return nil, err
+	}
+	defer lineRows.Close()
+	for lineRows.Next() {
+		var line PartnerSupplierReturnItem
+		if err := lineRows.Scan(
+			&line.ID, &line.SupplierReturnID, &line.ItemID, &line.ItemName,
+			&line.SKU, &line.MRP, &line.DiscountPercentage, &line.TaxPercentage,
+			&line.Quantity, &line.Reason, &line.Note,
+		); err != nil {
+			return nil, err
+		}
+		idx, ok := indexByID[line.SupplierReturnID]
+		if !ok {
+			continue
+		}
+		items[idx].Items = append(items[idx].Items, line)
+	}
+	return items, lineRows.Err()
+}
+
+func supplierReturnIDs(items []PartnerSupplierReturn) []string {
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	return ids
+}
+
+func (s *Store) GetPartnerSupplierReturnByID(firmID, returnID string) (PartnerSupplierReturn, error) {
+	items, err := s.GetPartnerSupplierReturns(firmID, "")
+	if err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	for _, item := range items {
+		if item.ID == strings.TrimSpace(returnID) {
+			return item, nil
+		}
+	}
+	return PartnerSupplierReturn{}, fmt.Errorf("supplier return not found")
+}
+
+func (s *Store) CreatePartnerSupplierReturn(firmID string, input CreatePartnerSupplierReturnInput) (PartnerSupplierReturn, error) {
+	ctx := context.Background()
+	if strings.TrimSpace(input.SupplierID) == "" || strings.TrimSpace(input.BrandID) == "" || strings.TrimSpace(input.ReturnDate) == "" {
+		return PartnerSupplierReturn{}, fmt.Errorf("supplierId, brandId, and returnDate are required")
+	}
+	if len(input.Items) == 0 {
+		return PartnerSupplierReturn{}, fmt.Errorf("items are required")
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var supplierStatus string
+	if err := tx.QueryRow(ctx, `
+		select status
+		from partner_suppliers
+		where firm_id = $1::bigint and id = $2
+	`, firmID, strings.TrimSpace(input.SupplierID)).Scan(&supplierStatus); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return PartnerSupplierReturn{}, fmt.Errorf("supplier not found")
+		}
+		return PartnerSupplierReturn{}, err
+	}
+	if supplierStatus != "ACTIVE" {
+		return PartnerSupplierReturn{}, fmt.Errorf("supplier must be active")
+	}
+
+	var brandExists bool
+	if err := tx.QueryRow(ctx, `
+		select exists(
+			select 1
+			from partner_firm_brands
+			where firm_id = $1::bigint and brand_id = $2::bigint
+		)
+	`, firmID, strings.TrimSpace(input.BrandID)).Scan(&brandExists); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	if !brandExists {
+		return PartnerSupplierReturn{}, fmt.Errorf("brand is not mapped to this firm")
+	}
+
+	returnID := nextID("psret")
+	returnNumber := "SR-" + time.Now().Format("20060102-150405000")
+	if _, err := tx.Exec(ctx, `
+		insert into partner_supplier_returns (
+			id, firm_id, return_number, supplier_id, brand_id, return_date, status, note, created_by
+		) values ($1, $2, $3, $4, $5::bigint, $6::date, 'PLACED', nullif($7, ''), $8)
+	`, returnID, firmID, returnNumber, strings.TrimSpace(input.SupplierID), strings.TrimSpace(input.BrandID), strings.TrimSpace(input.ReturnDate), strings.TrimSpace(input.Note), s.currentUserID); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+
+	seen := map[string]bool{}
+	for _, line := range input.Items {
+		itemID := strings.TrimSpace(line.ItemID)
+		if itemID == "" || line.Quantity <= 0 {
+			return PartnerSupplierReturn{}, fmt.Errorf("itemId and positive quantity are required")
+		}
+		if seen[itemID] {
+			return PartnerSupplierReturn{}, fmt.Errorf("duplicate return item")
+		}
+		seen[itemID] = true
+		reason := strings.TrimSpace(line.Reason)
+		if !isPartnerSupplierReturnReason(reason) {
+			return PartnerSupplierReturn{}, fmt.Errorf("invalid return reason")
+		}
+
+		var itemName, sku string
+		if err := tx.QueryRow(ctx, `
+			select c.name, c.sku
+			from partner_firm_inventory_items i
+			join partner_product_catalog c on c.id = i.catalog_item_id
+			where i.firm_id = $1::bigint
+			  and i.item_id = $2
+			  and c.brand_id = $3::bigint
+			  and i.status = 'ACTIVE'
+			for update of i
+		`, firmID, itemID, strings.TrimSpace(input.BrandID)).Scan(&itemName, &sku); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return PartnerSupplierReturn{}, fmt.Errorf("return item not found in active stock")
+			}
+			return PartnerSupplierReturn{}, err
+		}
+		if _, err := tx.Exec(ctx, `
+			insert into partner_supplier_return_items (
+				id, firm_id, supplier_return_id, item_id, item_name, sku, quantity, reason, note
+			) values ($1, $2, $3, $4, $5, nullif($6, ''), $7, $8, nullif($9, ''))
+		`, nextID("psreti"), firmID, returnID, itemID, itemName, sku, line.Quantity, reason, strings.TrimSpace(line.Note)); err != nil {
+			return PartnerSupplierReturn{}, err
+		}
+	}
+	if err := s.reservePartnerSupplierReturnTx(ctx, tx, firmID, returnID); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+
+	if err := s.insertPartnerAuditLogTx(ctx, tx, firmID, "SUPPLIER_RETURN", returnID, "CREATE", nil, map[string]any{
+		"returnNumber": returnNumber,
+		"supplierId":   strings.TrimSpace(input.SupplierID),
+		"brandId":      strings.TrimSpace(input.BrandID),
+		"returnDate":   strings.TrimSpace(input.ReturnDate),
+	}); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+
+	items, err := s.GetPartnerSupplierReturns(firmID, input.BrandID)
+	if err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	for _, item := range items {
+		if item.ID == returnID {
+			return item, nil
+		}
+	}
+	return PartnerSupplierReturn{}, fmt.Errorf("supplier return not found after create")
+}
+
+func (s *Store) reservePartnerSupplierReturnTx(ctx context.Context, tx pgx.Tx, firmID, returnID string) error {
+	rows, err := tx.Query(ctx, `
+		select sri.item_id, sri.item_name, sri.quantity, i.quantity, i.reserved_quantity
+		from partner_supplier_return_items sri
+		join partner_firm_inventory_items i on i.firm_id = sri.firm_id and i.item_id = sri.item_id
+		where sri.firm_id = $1::bigint and sri.supplier_return_id = $2
+		order by sri.created_at asc
+		for update of i
+	`, firmID, strings.TrimSpace(returnID))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type line struct {
+		itemID      string
+		itemName    string
+		quantity    int
+		currentQty  int
+		reservedQty int
+	}
+	lines := []line{}
+	for rows.Next() {
+		var next line
+		if err := rows.Scan(&next.itemID, &next.itemName, &next.quantity, &next.currentQty, &next.reservedQty); err != nil {
+			return err
+		}
+		if next.quantity > next.currentQty-next.reservedQty {
+			return fmt.Errorf("return quantity cannot exceed available stock for %s", next.itemName)
+		}
+		lines = append(lines, next)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(lines) == 0 {
+		return fmt.Errorf("supplier return has no items")
+	}
+	for _, line := range lines {
+		if _, err := tx.Exec(ctx, `
+			update partner_firm_inventory_items
+			set reserved_quantity = reserved_quantity + $3,
+			    updated_at = now()
+			where firm_id = $1::bigint and item_id = $2
+		`, firmID, line.itemID, line.quantity); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) releasePartnerSupplierReturnReservationTx(ctx context.Context, tx pgx.Tx, firmID, returnID string) error {
+	rows, err := tx.Query(ctx, `
+		select sri.item_id, sri.item_name, sri.quantity, i.reserved_quantity
+		from partner_supplier_return_items sri
+		join partner_firm_inventory_items i on i.firm_id = sri.firm_id and i.item_id = sri.item_id
+		where sri.firm_id = $1::bigint and sri.supplier_return_id = $2
+		order by sri.created_at asc
+		for update of i
+	`, firmID, strings.TrimSpace(returnID))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type line struct {
+		itemID      string
+		itemName    string
+		quantity    int
+		reservedQty int
+	}
+	lines := []line{}
+	for rows.Next() {
+		var next line
+		if err := rows.Scan(&next.itemID, &next.itemName, &next.quantity, &next.reservedQty); err != nil {
+			return err
+		}
+		if next.quantity > next.reservedQty {
+			return fmt.Errorf("reserved stock is not available for %s", next.itemName)
+		}
+		lines = append(lines, next)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, line := range lines {
+		if _, err := tx.Exec(ctx, `
+			update partner_firm_inventory_items
+			set reserved_quantity = reserved_quantity - $3,
+			    updated_at = now()
+			where firm_id = $1::bigint and item_id = $2
+		`, firmID, line.itemID, line.quantity); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) CancelPartnerSupplierReturn(firmID, returnID string, input CancelPartnerSupplierReturnInput) (PartnerSupplierReturn, error) {
+	ctx := context.Background()
+	reason := strings.TrimSpace(input.Reason)
+	if reason == "" {
+		return PartnerSupplierReturn{}, fmt.Errorf("reason is required")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	defer tx.Rollback(ctx)
+	var status string
+	if err := tx.QueryRow(ctx, `
+		select status
+		from partner_supplier_returns
+		where firm_id = $1::bigint and id = $2
+		for update
+	`, firmID, strings.TrimSpace(returnID)).Scan(&status); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return PartnerSupplierReturn{}, fmt.Errorf("supplier return not found")
+		}
+		return PartnerSupplierReturn{}, err
+	}
+	if status != "PLACED" {
+		return PartnerSupplierReturn{}, fmt.Errorf("only placed returns can be cancelled")
+	}
+	if err := s.releasePartnerSupplierReturnReservationTx(ctx, tx, firmID, returnID); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	if _, err := tx.Exec(ctx, `
+		update partner_supplier_returns
+		set status = 'CANCELLED',
+		    note = trim(both E'\n' from concat_ws(E'\n', nullif(note, ''), 'Cancelled: ' || $3)),
+		    updated_at = now()
+		where firm_id = $1::bigint and id = $2
+	`, firmID, strings.TrimSpace(returnID), reason); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	if err := s.insertPartnerAuditLogTx(ctx, tx, firmID, "SUPPLIER_RETURN", strings.TrimSpace(returnID), "CANCEL", map[string]any{"status": status}, map[string]any{"status": "CANCELLED", "reason": reason}); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	return s.GetPartnerSupplierReturnByID(firmID, returnID)
+}
+
+func (s *Store) UpdatePartnerSupplierReturn(firmID, returnID string, input CreatePartnerSupplierReturnInput) (PartnerSupplierReturn, error) {
+	ctx := context.Background()
+	if strings.TrimSpace(input.SupplierID) == "" || strings.TrimSpace(input.BrandID) == "" || strings.TrimSpace(input.ReturnDate) == "" {
+		return PartnerSupplierReturn{}, fmt.Errorf("supplierId, brandId, and returnDate are required")
+	}
+	if len(input.Items) == 0 {
+		return PartnerSupplierReturn{}, fmt.Errorf("items are required")
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var status string
+	if err := tx.QueryRow(ctx, `
+		select status
+		from partner_supplier_returns
+		where firm_id = $1::bigint and id = $2
+		for update
+	`, firmID, strings.TrimSpace(returnID)).Scan(&status); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return PartnerSupplierReturn{}, fmt.Errorf("supplier return not found")
+		}
+		return PartnerSupplierReturn{}, err
+	}
+	if status != "PLACED" {
+		return PartnerSupplierReturn{}, fmt.Errorf("only placed returns can be edited")
+	}
+	if err := s.releasePartnerSupplierReturnReservationTx(ctx, tx, firmID, returnID); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+
+	var supplierStatus string
+	if err := tx.QueryRow(ctx, `
+		select status
+		from partner_suppliers
+		where firm_id = $1::bigint and id = $2
+	`, firmID, strings.TrimSpace(input.SupplierID)).Scan(&supplierStatus); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return PartnerSupplierReturn{}, fmt.Errorf("supplier not found")
+		}
+		return PartnerSupplierReturn{}, err
+	}
+	if supplierStatus != "ACTIVE" {
+		return PartnerSupplierReturn{}, fmt.Errorf("supplier must be active")
+	}
+
+	var brandExists bool
+	if err := tx.QueryRow(ctx, `
+		select exists(
+			select 1
+			from partner_firm_brands
+			where firm_id = $1::bigint and brand_id = $2::bigint
+		)
+	`, firmID, strings.TrimSpace(input.BrandID)).Scan(&brandExists); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	if !brandExists {
+		return PartnerSupplierReturn{}, fmt.Errorf("brand is not mapped to this firm")
+	}
+
+	if _, err := tx.Exec(ctx, `
+		update partner_supplier_returns
+		set supplier_id = $3,
+		    brand_id = $4::bigint,
+		    return_date = $5::date,
+		    note = nullif($6, ''),
+		    updated_at = now()
+		where firm_id = $1::bigint and id = $2
+	`, firmID, strings.TrimSpace(returnID), strings.TrimSpace(input.SupplierID), strings.TrimSpace(input.BrandID), strings.TrimSpace(input.ReturnDate), strings.TrimSpace(input.Note)); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	if _, err := tx.Exec(ctx, `
+		delete from partner_supplier_return_items
+		where firm_id = $1::bigint and supplier_return_id = $2
+	`, firmID, strings.TrimSpace(returnID)); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+
+	seen := map[string]bool{}
+	for _, line := range input.Items {
+		itemID := strings.TrimSpace(line.ItemID)
+		if itemID == "" || line.Quantity <= 0 {
+			return PartnerSupplierReturn{}, fmt.Errorf("itemId and positive quantity are required")
+		}
+		if seen[itemID] {
+			return PartnerSupplierReturn{}, fmt.Errorf("duplicate return item")
+		}
+		seen[itemID] = true
+		reason := strings.TrimSpace(line.Reason)
+		if !isPartnerSupplierReturnReason(reason) {
+			return PartnerSupplierReturn{}, fmt.Errorf("invalid return reason")
+		}
+		var itemName, sku string
+		if err := tx.QueryRow(ctx, `
+			select c.name, c.sku
+			from partner_firm_inventory_items i
+			join partner_product_catalog c on c.id = i.catalog_item_id
+			where i.firm_id = $1::bigint
+			  and i.item_id = $2
+			  and c.brand_id = $3::bigint
+			  and i.status = 'ACTIVE'
+			for update of i
+		`, firmID, itemID, strings.TrimSpace(input.BrandID)).Scan(&itemName, &sku); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return PartnerSupplierReturn{}, fmt.Errorf("return item not found in active stock")
+			}
+			return PartnerSupplierReturn{}, err
+		}
+		if _, err := tx.Exec(ctx, `
+			insert into partner_supplier_return_items (
+				id, firm_id, supplier_return_id, item_id, item_name, sku, quantity, reason, note
+			) values ($1, $2, $3, $4, $5, nullif($6, ''), $7, $8, nullif($9, ''))
+		`, nextID("psreti"), firmID, strings.TrimSpace(returnID), itemID, itemName, sku, line.Quantity, reason, strings.TrimSpace(line.Note)); err != nil {
+			return PartnerSupplierReturn{}, err
+		}
+	}
+	if err := s.reservePartnerSupplierReturnTx(ctx, tx, firmID, returnID); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	if err := s.insertPartnerAuditLogTx(ctx, tx, firmID, "SUPPLIER_RETURN", strings.TrimSpace(returnID), "UPDATE", map[string]any{"status": status}, map[string]any{
+		"supplierId": strings.TrimSpace(input.SupplierID),
+		"brandId":    strings.TrimSpace(input.BrandID),
+		"returnDate": strings.TrimSpace(input.ReturnDate),
+	}); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	return s.GetPartnerSupplierReturnByID(firmID, returnID)
+}
+
+func (s *Store) CompletePartnerSupplierReturn(firmID, returnID string) (PartnerSupplierReturn, error) {
+	ctx := context.Background()
+	if strings.TrimSpace(returnID) == "" {
+		return PartnerSupplierReturn{}, fmt.Errorf("supplier return id is required")
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var brandID, status, returnDate string
+	if err := tx.QueryRow(ctx, `
+		select brand_id::text, status, return_date::text
+		from partner_supplier_returns
+		where firm_id = $1::bigint and id = $2
+		for update
+	`, firmID, strings.TrimSpace(returnID)).Scan(&brandID, &status, &returnDate); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return PartnerSupplierReturn{}, fmt.Errorf("supplier return not found")
+		}
+		return PartnerSupplierReturn{}, err
+	}
+	if status == "COMPLETED" {
+		return PartnerSupplierReturn{}, fmt.Errorf("supplier return is already completed")
+	}
+	if status != "PLACED" {
+		return PartnerSupplierReturn{}, fmt.Errorf("only placed returns can be completed")
+	}
+
+	rows, err := tx.Query(ctx, `
+		select sri.item_id, sri.item_name, sri.quantity, sri.reason, coalesce(sri.note, ''),
+		       i.quantity, i.reserved_quantity, i.mrp, i.discount_percentage::float8, i.tax_percentage::float8
+		from partner_supplier_return_items sri
+		join partner_firm_inventory_items i on i.firm_id = sri.firm_id and i.item_id = sri.item_id
+		where sri.firm_id = $1::bigint and sri.supplier_return_id = $2
+		order by sri.created_at asc
+		for update of i
+	`, firmID, strings.TrimSpace(returnID))
+	if err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	defer rows.Close()
+
+	type returnLine struct {
+		itemID             string
+		itemName           string
+		quantity           int
+		reason             string
+		note               string
+		currentQuantity    int
+		reservedQuantity   int
+		mrp                int
+		discountPercentage float64
+		taxPercentage      float64
+	}
+	lines := []returnLine{}
+	for rows.Next() {
+		var line returnLine
+		if err := rows.Scan(
+			&line.itemID, &line.itemName, &line.quantity, &line.reason, &line.note,
+			&line.currentQuantity, &line.reservedQuantity, &line.mrp, &line.discountPercentage, &line.taxPercentage,
+		); err != nil {
+			return PartnerSupplierReturn{}, err
+		}
+		if line.quantity > line.reservedQuantity || line.quantity > line.currentQuantity {
+			return PartnerSupplierReturn{}, fmt.Errorf("reserved stock is not available for %s", line.itemName)
+		}
+		lines = append(lines, line)
+	}
+	if err := rows.Err(); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	if len(lines) == 0 {
+		return PartnerSupplierReturn{}, fmt.Errorf("supplier return has no items")
+	}
+
+	for _, line := range lines {
+		if _, err := tx.Exec(ctx, `
+			update partner_firm_inventory_items
+			set quantity = quantity - $3,
+			    reserved_quantity = reserved_quantity - $3,
+			    updated_at = now()
+			where firm_id = $1::bigint and item_id = $2
+		`, firmID, line.itemID, line.quantity); err != nil {
+			return PartnerSupplierReturn{}, err
+		}
+		ledgerNote := fmt.Sprintf("%s; MRP %d; Discount %.2f%%; GST %.2f%%", line.reason, line.mrp, line.discountPercentage, line.taxPercentage)
+		if strings.TrimSpace(line.note) != "" {
+			ledgerNote = ledgerNote + ": " + strings.TrimSpace(line.note)
+		}
+		if _, err := tx.Exec(ctx, `
+			insert into partner_stock_entries (
+				id, firm_id, item_id, quantity_delta, reason_type, reference_type, reference_id, note, created_by, created_at
+			) values ($1, $2, $3, $4, 'RETURN_OUT', 'SUPPLIER_RETURN', $5, nullif($6, ''), $7, $8::date)
+		`, nextID("pstock"), firmID, line.itemID, -line.quantity, strings.TrimSpace(returnID), ledgerNote, s.currentUserID, returnDate); err != nil {
+			return PartnerSupplierReturn{}, err
+		}
+	}
+
+	if _, err := tx.Exec(ctx, `
+		update partner_supplier_returns
+		set status = 'COMPLETED',
+		    updated_at = now()
+		where firm_id = $1::bigint and id = $2
+	`, firmID, strings.TrimSpace(returnID)); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	if err := s.insertPartnerAuditLogTx(ctx, tx, firmID, "SUPPLIER_RETURN", strings.TrimSpace(returnID), "COMPLETE", map[string]any{
+		"status": status,
+	}, map[string]any{
+		"status": "COMPLETED",
+	}); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+
+	items, err := s.GetPartnerSupplierReturns(firmID, brandID)
+	if err != nil {
+		return PartnerSupplierReturn{}, err
+	}
+	for _, item := range items {
+		if item.ID == strings.TrimSpace(returnID) {
+			return item, nil
+		}
+	}
+	return PartnerSupplierReturn{}, fmt.Errorf("supplier return not found after complete")
+}
+
+func isPartnerSupplierReturnReason(reason string) bool {
+	switch reason {
+	case "DAMAGED", "WRONG_ITEM", "EXPIRED", "EXCESS_STOCK", "OTHER":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Store) GetPartnerStockLedger(firmID, itemID string, filters PartnerStockLedgerFilters) ([]PartnerStockLedgerEntry, error) {
@@ -8996,19 +9856,19 @@ func (s *Store) CreatePartnerStockAction(firmID string, input CreatePartnerStock
 	}
 	defer tx.Rollback(ctx)
 
-	var currentQty int
+	var currentQty, reservedQty int
 	if err := tx.QueryRow(ctx, `
-		select quantity
+		select quantity, reserved_quantity
 		from partner_firm_inventory_items
 		where firm_id = $1::bigint and item_id = $2
 		for update
-	`, firmID, input.ItemID).Scan(&currentQty); err != nil {
+	`, firmID, input.ItemID).Scan(&currentQty, &reservedQty); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return PartnerStockLedgerEntry{}, fmt.Errorf("stock item not found")
 		}
 		return PartnerStockLedgerEntry{}, err
 	}
-	if quantityDelta < 0 && currentQty+quantityDelta < 0 {
+	if quantityDelta < 0 && currentQty-reservedQty+quantityDelta < 0 {
 		return PartnerStockLedgerEntry{}, fmt.Errorf("quantity exceeds available stock")
 	}
 	if strings.TrimSpace(input.SupplierID) != "" {
@@ -9205,7 +10065,8 @@ func (s *Store) GetPartnerInventory(firmID, brandID string) ([]PartnerInventoryI
 	ctx := context.Background()
 	rows, err := s.pool.Query(ctx, `
 		select i.firm_id, i.item_id, i.catalog_item_id, c.brand_id, c.name, c.sku,
-		       i.mrp, i.discount_percentage::float8, i.status, i.quantity,
+		       i.mrp, i.discount_percentage::float8, i.tax_percentage::float8, i.status, i.quantity,
+		       i.reserved_quantity, greatest(i.quantity - i.reserved_quantity, 0)::int,
 		       to_char(i.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 		       coalesce(r.supplier_id, ''), coalesce(s.supplier_name, ''),
 		       coalesce(to_char(r.received_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), '')
@@ -9242,8 +10103,11 @@ func (s *Store) GetPartnerInventory(firmID, brandID string) ([]PartnerInventoryI
 			&item.SKU,
 			&item.MRP,
 			&item.DiscountPercentage,
+			&item.TaxPercentage,
 			&item.Status,
 			&item.Quantity,
+			&item.ReservedQuantity,
+			&item.AvailableQuantity,
 			&item.UpdatedAt,
 			&item.LastSupplierID,
 			&item.LastSupplierName,
@@ -9270,7 +10134,8 @@ func (s *Store) UpdatePartnerInventoryItem(firmID, itemID string, input UpdatePa
 	var current PartnerInventoryItem
 	if err := tx.QueryRow(ctx, `
 		select i.firm_id, i.item_id, i.catalog_item_id, c.brand_id, c.name, c.sku,
-		       i.mrp, i.discount_percentage::float8, i.status, i.quantity,
+		       i.mrp, i.discount_percentage::float8, i.tax_percentage::float8, i.status, i.quantity,
+		       i.reserved_quantity, greatest(i.quantity - i.reserved_quantity, 0)::int,
 		       to_char(i.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
 		from partner_firm_inventory_items i
 		join partner_product_catalog c on c.id = i.catalog_item_id
@@ -9284,8 +10149,11 @@ func (s *Store) UpdatePartnerInventoryItem(firmID, itemID string, input UpdatePa
 		&current.SKU,
 		&current.MRP,
 		&current.DiscountPercentage,
+		&current.TaxPercentage,
 		&current.Status,
 		&current.Quantity,
+		&current.ReservedQuantity,
+		&current.AvailableQuantity,
 		&current.UpdatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -9299,6 +10167,9 @@ func (s *Store) UpdatePartnerInventoryItem(firmID, itemID string, input UpdatePa
 	if input.Quantity != nil {
 		if *input.Quantity < 0 {
 			return PartnerInventoryItem{}, fmt.Errorf("quantity cannot be negative")
+		}
+		if *input.Quantity < current.ReservedQuantity {
+			return PartnerInventoryItem{}, fmt.Errorf("quantity cannot be lower than reserved stock")
 		}
 		current.Quantity = *input.Quantity
 	}

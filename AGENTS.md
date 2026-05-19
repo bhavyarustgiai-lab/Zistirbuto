@@ -360,6 +360,8 @@ Dialogs/sheets should have titles.
 
 Icon-only buttons must have accessible labels/tooltips.
 
+Editable forms, tables, and grid-like flows must not shift layout while users type, select values, focus fields, or trigger validation. Use fixed/table-fixed column sizing, explicit control widths, min/max constraints, reserved space where needed, and tabular numeric rendering for changing numbers so input content and error text do not change container or table width.
+
 ## 18. Styling Rules
 
 Use:

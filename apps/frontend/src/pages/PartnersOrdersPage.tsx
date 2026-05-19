@@ -137,7 +137,7 @@ export function PartnersOrdersPage() {
             itemBrandById={itemBrandById}
             brandNamesById={brandNamesById}
             outletAddressById={outletAddressById}
-            onOpenOrder={(orderId) => navigate(`/partners/orders/${orderId}`)}
+            onOpenOrder={(orderId) => navigate(`/partners/sales/orders/${orderId}`)}
             onStatusChange={async (orderId, status) => {
               const updated = await orders.updateStatus(orderId, status);
               push({ tone: "success", title: "Order updated", description: `${updated.orderNumber} is now ${updated.status.toLowerCase()}.` });

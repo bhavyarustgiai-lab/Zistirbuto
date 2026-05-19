@@ -2,9 +2,9 @@ import { useMemo, useState } from "react";
 import { Printer, Search } from "lucide-react";
 import { useAppState } from "@app/providers/AppStateProvider";
 import { Button } from "@components/ui/button";
-import { Badge } from "@components/ui/badge";
 import { Input } from "@components/ui/input";
 import { EmptyState } from "@shared/ui/molecules/EmptyState";
+import { PartnerStatusBadge } from "@features/partners/PartnerStatusBadge";
 import { DocumentPrintDialog } from "@features/partners/documents/components/DocumentPrintDialog";
 import { CreditNotePrintView } from "@features/partners/documents/components/CreditNotePrintView";
 import {
@@ -25,12 +25,6 @@ function formatDate(value?: string) {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(date);
-}
-
-function CreditNoteStatusBadge({ status }: { status: PartnerCreditNote["status"] }) {
-  if (status === "ISSUED") return <Badge tone="done">Issued</Badge>;
-  if (status === "CANCELLED") return <Badge tone="cancelled">Cancelled</Badge>;
-  return <Badge tone="neutral">Draft</Badge>;
 }
 
 export function PartnerCreditNotesPage() {
@@ -108,7 +102,7 @@ export function PartnerCreditNotesPage() {
                     <td className="px-4 py-3">{note.relatedInvoiceNumber || "-"}</td>
                     <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-950">{formatMoney(note.totalAmount)}</td>
                     <td className="px-4 py-3">
-                      <CreditNoteStatusBadge status={note.status} />
+                      <PartnerStatusBadge status={note.status} />
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Button type="button" variant="ghost" className="h-8 px-2 text-xs" onClick={() => setPrintingNote(note)}>

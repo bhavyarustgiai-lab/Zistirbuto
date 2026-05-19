@@ -109,7 +109,7 @@ export function PartnersBackordersPage() {
                 </thead>
                 <tbody>
                   {filteredRows.map((row) => (
-                    <tr key={row.id} className="cursor-pointer border-b border-slate-100 text-slate-700 hover:bg-slate-50" onClick={() => navigate(`/partners/orders/${row.orderId}`)}>
+                    <tr key={row.id} className="cursor-pointer border-b border-slate-100 text-slate-700 hover:bg-slate-50" onClick={() => navigate(`/partners/sales/orders/${row.orderId}`)}>
                       <td className="px-3 py-3 font-medium text-slate-900">{row.clientName}</td>
                       <td className="px-3 py-3">{row.outletName}</td>
                       <td className="px-3 py-3">

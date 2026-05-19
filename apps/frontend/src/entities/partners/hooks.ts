@@ -29,6 +29,7 @@ import type {
   PartnerSupplierInvoice,
   PartnerSupplierLedgerEntry,
   PartnerSupplierPayment,
+  PartnerSupplierReturn,
   PartnerSupplierGSTINValidation,
   PartnerGSTINValidation,
   PartnerStockActionInput,
@@ -36,6 +37,7 @@ import type {
   PartnerStockLedgerFilters,
   PartnerStockReasonType,
   PartnerStockRow,
+  CreatePartnerSupplierReturnInput,
 } from "@shared/types/domain";
 import {
   addPartnerClientOutlet,
@@ -50,7 +52,13 @@ import {
   createPartnerPayment,
   createPartnerSupplierInvoice,
   createPartnerSupplierPayment,
+  createPartnerSupplierReturn,
+  completePartnerSupplierReturn,
+  cancelPartnerSupplierReturn,
+  getPartnerSupplierReturnById,
+  updatePartnerSupplierReturn,
   updatePartnerOrder,
+  updatePartnerPurchase,
   createPartnerPurchase,
   createPartnerStockAction,
   createPartnerSupplier,
@@ -81,6 +89,7 @@ import {
   getPartnerSupplierInvoices,
   getPartnerSupplierLedger,
   getPartnerSupplierPayments,
+  getPartnerSupplierReturns,
   getPartnerInventory,
   getPartnerInventoryHistory,
   revertPartnerSupplyInward,
@@ -1002,7 +1011,8 @@ export function usePartnerPayables(
       return next;
     },
     recordPayment: async (input: {
-      supplierInvoiceId: string;
+      supplierInvoiceId?: string;
+      supplierId?: string;
       paymentDate: string;
       amount: number;
       paymentMode: PartnerPaymentMode;
@@ -1159,14 +1169,12 @@ export function usePartnerPurchases(firmId: number | string) {
       supplierId: string;
       purchaseNumber: string;
       supplierInvoiceNumber?: string;
-      supplierInvoiceDate?: string;
-      purchaseDate: string;
-      expectedInwardDate?: string;
       notes?: string;
       items: Array<{ itemId: string; quantity: number; costPrice: number; discountPercentage?: number; taxPercentage?: number }>;
     }) => {
-      await createPartnerPurchase(firmId, input);
+      const created = await createPartnerPurchase(firmId, input);
       await refresh();
+      return created;
     },
     order: async (purchaseId: string) => {
       await orderPartnerPurchase(firmId, purchaseId);
@@ -1183,8 +1191,8 @@ export function usePartnerPurchases(firmId: number | string) {
       await receivePartnerPurchase(firmId, purchaseId, input);
       await refresh();
     },
-    cancel: async (purchaseId: string) => {
-      await cancelPartnerPurchase(firmId, purchaseId);
+    cancel: async (purchaseId: string, input: { reason: string }) => {
+      await cancelPartnerPurchase(firmId, purchaseId, input);
       await refresh();
     },
   };
@@ -1249,8 +1257,18 @@ export function usePartnerPurchase(firmId: number | string, purchaseId: string) 
       setReceipts(nextReceipts);
       return next;
     },
-    cancel: async () => {
-      const next = await cancelPartnerPurchase(firmId, purchaseId);
+    update: async (input: {
+      supplierId: string;
+      supplierInvoiceNumber?: string;
+      notes?: string;
+      items: Array<{ itemId: string; quantity: number; costPrice: number; discountPercentage?: number; taxPercentage?: number }>;
+    }) => {
+      const next = await updatePartnerPurchase(firmId, purchaseId, input);
+      setItem(next);
+      return next;
+    },
+    cancel: async (input: { reason: string }) => {
+      const next = await cancelPartnerPurchase(firmId, purchaseId, input);
       setItem(next);
       return next;
     },
@@ -1280,17 +1298,135 @@ export function usePartnerStock(firmId: number | string, brandId: number | strin
   };
 }
 
-export function usePartnerInventory(firmId: number | string, brandId: number | string) {
-  const [items, setItems] = useState<PartnerInventoryItem[]>([]);
+export function usePartnerSupplierReturns(firmId: number | string, brandId: number | string) {
+  const [items, setItems] = useState<PartnerSupplierReturn[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
     if (!firmId) {
       setItems([]);
+      setIsLoading(false);
+      return [] as PartnerSupplierReturn[];
+    }
+    setIsLoading(true);
+    setError("");
+    try {
+      const next = await getPartnerSupplierReturns(firmId, brandId);
+      setItems(next);
+      return next;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Something went wrong, please try again later";
+      setError(message);
+      return [] as PartnerSupplierReturn[];
+    } finally {
+      setIsLoading(false);
+    }
+  }, [brandId, firmId]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return {
+    items,
+    isLoading,
+    error,
+    refresh,
+    create: async (input: CreatePartnerSupplierReturnInput) => {
+      const next = await createPartnerSupplierReturn(firmId, input);
+      await refresh();
+      return next;
+    },
+    update: async (returnId: string, input: CreatePartnerSupplierReturnInput) => {
+      const next = await updatePartnerSupplierReturn(firmId, returnId, input);
+      await refresh();
+      return next;
+    },
+    cancel: async (returnId: string, input: { reason: string }) => {
+      const next = await cancelPartnerSupplierReturn(firmId, returnId, input);
+      await refresh();
+      return next;
+    },
+    complete: async (returnId: string) => {
+      const next = await completePartnerSupplierReturn(firmId, returnId);
+      await refresh();
+      return next;
+    },
+  };
+}
+
+export function usePartnerSupplierReturn(firmId: number | string, returnId: string) {
+  const [item, setItem] = useState<PartnerSupplierReturn | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(async () => {
+    if (!firmId || !returnId) {
+      setItem(null);
+      return null;
+    }
+    setIsLoading(true);
+    setError("");
+    try {
+      const next = await getPartnerSupplierReturnById(firmId, returnId);
+      setItem(next);
+      return next;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Something went wrong, please try again later";
+      setError(message);
+      setItem(null);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [firmId, returnId]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return {
+    item,
+    isLoading,
+    error,
+    refresh,
+    update: async (input: CreatePartnerSupplierReturnInput) => {
+      const next = await updatePartnerSupplierReturn(firmId, returnId, input);
+      setItem(next);
+      return next;
+    },
+    cancel: async (input: { reason: string }) => {
+      const next = await cancelPartnerSupplierReturn(firmId, returnId, input);
+      setItem(next);
+      return next;
+    },
+    complete: async () => {
+      const next = await completePartnerSupplierReturn(firmId, returnId);
+      setItem(next);
+      return next;
+    },
+  };
+}
+
+export function usePartnerInventory(firmId: number | string, brandId: number | string) {
+  const [items, setItems] = useState<PartnerInventoryItem[]>([]);
+  const [loading, setLoading] = useState(() => Boolean(firmId));
+
+  const refresh = useCallback(async () => {
+    if (!firmId) {
+      setItems([]);
+      setLoading(false);
       return [] as PartnerInventoryItem[];
     }
-    const next = await getPartnerInventory(firmId, brandId);
-    setItems(next);
-    return next;
+    setLoading(true);
+    try {
+      const next = await getPartnerInventory(firmId, brandId);
+      setItems(next);
+      return next;
+    } finally {
+      setLoading(false);
+    }
   }, [firmId, brandId]);
 
   useEffect(() => {
@@ -1299,6 +1435,7 @@ export function usePartnerInventory(firmId: number | string, brandId: number | s
 
   return {
     items,
+    loading,
     refresh,
     update: async (itemId: string, input: PartnerInventoryUpdateInput) => {
       await updatePartnerInventory(firmId, itemId, input);

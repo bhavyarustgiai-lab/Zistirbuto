@@ -101,10 +101,17 @@ func RegisterRoutes(mux *http.ServeMux, prefix string, st *store.Store, otpServi
 	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}/purchases", h.getPartnerPurchases)
 	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/purchases", h.createPartnerPurchase)
 	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}/purchases/{purchaseId}", h.getPartnerPurchaseByID)
+	mux.HandleFunc("PATCH "+prefix+"/partners/firms/{firmId}/purchases/{purchaseId}", h.updatePartnerPurchase)
 	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/purchases/{purchaseId}/order", h.orderPartnerPurchase)
 	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/purchases/{purchaseId}/cancel", h.cancelPartnerPurchase)
 	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}/purchases/{purchaseId}/receipts", h.getPartnerGoodsReceipts)
 	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/purchases/{purchaseId}/receipts", h.receivePartnerPurchase)
+	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}/supplier-returns", h.getPartnerSupplierReturns)
+	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/supplier-returns", h.createPartnerSupplierReturn)
+	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}/supplier-returns/{returnId}", h.getPartnerSupplierReturnByID)
+	mux.HandleFunc("PATCH "+prefix+"/partners/firms/{firmId}/supplier-returns/{returnId}", h.updatePartnerSupplierReturn)
+	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/supplier-returns/{returnId}/cancel", h.cancelPartnerSupplierReturn)
+	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/supplier-returns/{returnId}/complete", h.completePartnerSupplierReturn)
 	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}/stock", h.getPartnerStock)
 	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}/stock/reference-ledger", h.getPartnerStockLedgerByReference)
 	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}/stock/{itemId}/ledger", h.getPartnerStockLedger)
@@ -1583,6 +1590,157 @@ func (h *Handler) createPartnerStockAction(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, item)
 }
 
+func (h *Handler) getPartnerSupplierReturns(w http.ResponseWriter, r *http.Request) {
+	st, ok := h.authedStore(w, r)
+	if !ok {
+		return
+	}
+	firmID := r.PathValue("firmId")
+	if firmID == "" {
+		badRequest(w, "firmId is required")
+		return
+	}
+	if !st.UserHasPartnerFirmAccess(firmID) {
+		forbidden(w, "firm access denied")
+		return
+	}
+	items, err := st.GetPartnerSupplierReturns(firmID, r.URL.Query().Get("brandId"))
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (h *Handler) createPartnerSupplierReturn(w http.ResponseWriter, r *http.Request) {
+	st, ok := h.authedStore(w, r)
+	if !ok {
+		return
+	}
+	firmID := r.PathValue("firmId")
+	if firmID == "" {
+		badRequest(w, "firmId is required")
+		return
+	}
+	if !st.UserHasPartnerFirmAccess(firmID) {
+		forbidden(w, "firm access denied")
+		return
+	}
+	var req store.CreatePartnerSupplierReturnInput
+	if err := decodeJSON(r, &req); err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+	item, err := st.CreatePartnerSupplierReturn(firmID, req)
+	if err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (h *Handler) getPartnerSupplierReturnByID(w http.ResponseWriter, r *http.Request) {
+	st, ok := h.authedStore(w, r)
+	if !ok {
+		return
+	}
+	firmID := r.PathValue("firmId")
+	returnID := r.PathValue("returnId")
+	if firmID == "" || returnID == "" {
+		badRequest(w, "firmId and returnId are required")
+		return
+	}
+	if !st.UserHasPartnerFirmAccess(firmID) {
+		forbidden(w, "firm access denied")
+		return
+	}
+	item, err := st.GetPartnerSupplierReturnByID(firmID, returnID)
+	if err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (h *Handler) updatePartnerSupplierReturn(w http.ResponseWriter, r *http.Request) {
+	st, ok := h.authedStore(w, r)
+	if !ok {
+		return
+	}
+	firmID := r.PathValue("firmId")
+	returnID := r.PathValue("returnId")
+	if firmID == "" || returnID == "" {
+		badRequest(w, "firmId and returnId are required")
+		return
+	}
+	if !st.UserHasPartnerFirmAccess(firmID) {
+		forbidden(w, "firm access denied")
+		return
+	}
+	var req store.CreatePartnerSupplierReturnInput
+	if err := decodeJSON(r, &req); err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+	item, err := st.UpdatePartnerSupplierReturn(firmID, returnID, req)
+	if err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (h *Handler) cancelPartnerSupplierReturn(w http.ResponseWriter, r *http.Request) {
+	st, ok := h.authedStore(w, r)
+	if !ok {
+		return
+	}
+	firmID := r.PathValue("firmId")
+	returnID := r.PathValue("returnId")
+	if firmID == "" || returnID == "" {
+		badRequest(w, "firmId and returnId are required")
+		return
+	}
+	if !st.UserHasPartnerFirmAccess(firmID) {
+		forbidden(w, "firm access denied")
+		return
+	}
+	var req store.CancelPartnerSupplierReturnInput
+	if err := decodeJSON(r, &req); err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+	item, err := st.CancelPartnerSupplierReturn(firmID, returnID, req)
+	if err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (h *Handler) completePartnerSupplierReturn(w http.ResponseWriter, r *http.Request) {
+	st, ok := h.authedStore(w, r)
+	if !ok {
+		return
+	}
+	firmID := r.PathValue("firmId")
+	returnID := r.PathValue("returnId")
+	if firmID == "" || returnID == "" {
+		badRequest(w, "firmId and returnId are required")
+		return
+	}
+	if !st.UserHasPartnerFirmAccess(firmID) {
+		forbidden(w, "firm access denied")
+		return
+	}
+	item, err := st.CompletePartnerSupplierReturn(firmID, returnID)
+	if err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
 func (h *Handler) getPartnerInventory(w http.ResponseWriter, r *http.Request) {
 	st, ok := h.authedStore(w, r)
 	if !ok {
@@ -2706,6 +2864,34 @@ func (h *Handler) createPartnerPurchase(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, item)
 }
 
+func (h *Handler) updatePartnerPurchase(w http.ResponseWriter, r *http.Request) {
+	st, ok := h.authedStore(w, r)
+	if !ok {
+		return
+	}
+	firmID := r.PathValue("firmId")
+	purchaseID := r.PathValue("purchaseId")
+	if firmID == "" || purchaseID == "" {
+		badRequest(w, "firmId and purchaseId are required")
+		return
+	}
+	if !st.UserHasPartnerFirmAccess(firmID) {
+		forbidden(w, "firm access denied")
+		return
+	}
+	var req store.UpdatePartnerPurchaseInput
+	if err := decodeJSON(r, &req); err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+	item, err := st.UpdatePartnerPurchase(firmID, purchaseID, req)
+	if err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
 func (h *Handler) orderPartnerPurchase(w http.ResponseWriter, r *http.Request) {
 	st, ok := h.authedStore(w, r)
 	if !ok {
@@ -2744,7 +2930,12 @@ func (h *Handler) cancelPartnerPurchase(w http.ResponseWriter, r *http.Request) 
 		forbidden(w, "firm access denied")
 		return
 	}
-	item, err := st.CancelPartnerPurchase(firmID, purchaseID)
+	var req store.CancelPartnerPurchaseInput
+	if err := decodeJSON(r, &req); err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+	item, err := st.CancelPartnerPurchase(firmID, purchaseID, req)
 	if err != nil {
 		badRequest(w, err.Error())
 		return

@@ -358,14 +358,18 @@ CREATE TABLE public.partner_firm_inventory_items (
     catalog_item_id text NOT NULL,
     mrp integer NOT NULL,
     discount_percentage numeric(5,2) NOT NULL,
+    tax_percentage numeric(5,2) DEFAULT 0 NOT NULL,
     status text DEFAULT 'ACTIVE'::text NOT NULL,
     quantity integer DEFAULT 0 NOT NULL,
+    reserved_quantity integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT partner_firm_inventory_items_discount_percentage_check CHECK (((discount_percentage > (0)::numeric) AND (discount_percentage <= (100)::numeric))),
-    CONSTRAINT partner_firm_inventory_items_mrp_check CHECK ((mrp > 0)),
+    CONSTRAINT partner_firm_inventory_items_discount_percentage_check CHECK (((discount_percentage >= (0)::numeric) AND (discount_percentage <= (100)::numeric))),
+    CONSTRAINT partner_firm_inventory_items_mrp_check CHECK ((mrp >= 0)),
     CONSTRAINT partner_firm_inventory_items_quantity_check CHECK ((quantity >= 0)),
-    CONSTRAINT partner_firm_inventory_items_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'INACTIVE'::text])))
+    CONSTRAINT partner_firm_inventory_items_reserved_quantity_check CHECK (((reserved_quantity >= 0) AND (reserved_quantity <= quantity))),
+    CONSTRAINT partner_firm_inventory_items_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'INACTIVE'::text]))),
+    CONSTRAINT partner_firm_inventory_items_tax_percentage_check CHECK (((tax_percentage >= (0)::numeric) AND (tax_percentage <= (100)::numeric)))
 );
 
 
@@ -501,7 +505,7 @@ CREATE TABLE public.partner_inventory_receipts (
     note text,
     created_by bigint,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    status text DEFAULT 'POSTED'::text NOT NULL,
+    status text DEFAULT 'PLACED'::text NOT NULL,
     voided_at timestamp with time zone,
     void_reason text,
     supply_inward_id text,
@@ -869,9 +873,7 @@ CREATE TABLE public.partner_purchases (
     supplier_id text NOT NULL,
     purchase_number text NOT NULL,
     supplier_invoice_number text,
-    supplier_invoice_date date,
     purchase_date date NOT NULL,
-    expected_inward_date date,
     status text DEFAULT 'DRAFT'::text NOT NULL,
     notes text,
     created_by bigint NOT NULL,
@@ -882,7 +884,7 @@ CREATE TABLE public.partner_purchases (
     ordered_at timestamp with time zone,
     posted_at timestamp with time zone,
     cancelled_at timestamp with time zone,
-    CONSTRAINT partner_purchases_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'ORDERED'::text, 'PARTIALLY_RECEIVED'::text, 'RECEIVED'::text, 'CANCELLED'::text])))
+    CONSTRAINT partner_purchases_status_check CHECK ((status = ANY (ARRAY['DRAFT'::text, 'PLACED'::text, 'COMPLETED'::text, 'CANCELLED'::text])))
 );
 
 
@@ -1045,6 +1047,46 @@ CREATE TABLE public.partner_suppliers (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT partner_suppliers_status_check CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'INACTIVE'::text, 'ARCHIVED'::text])))
+);
+
+
+--
+-- Name: partner_supplier_returns; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.partner_supplier_returns (
+    id text NOT NULL PRIMARY KEY,
+    firm_id bigint NOT NULL,
+    return_number text NOT NULL,
+    supplier_id text NOT NULL,
+    brand_id bigint NOT NULL,
+    return_date date NOT NULL,
+    status text DEFAULT 'PLACED'::text NOT NULL,
+    note text,
+    created_by bigint,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT partner_supplier_returns_status_check CHECK ((status = ANY (ARRAY['PLACED'::text, 'COMPLETED'::text, 'CANCELLED'::text])))
+);
+
+
+--
+-- Name: partner_supplier_return_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.partner_supplier_return_items (
+    id text NOT NULL PRIMARY KEY,
+    firm_id bigint NOT NULL,
+    supplier_return_id text NOT NULL,
+    item_id text NOT NULL,
+    item_name text NOT NULL,
+    sku text,
+    quantity integer NOT NULL,
+    reason text NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT partner_supplier_return_items_quantity_check CHECK ((quantity > 0)),
+    CONSTRAINT partner_supplier_return_items_reason_check CHECK ((reason = ANY (ARRAY['DAMAGED'::text, 'WRONG_ITEM'::text, 'EXPIRED'::text, 'EXCESS_STOCK'::text, 'OTHER'::text])))
 );
 
 
@@ -1740,11 +1782,11 @@ ALTER TABLE ONLY public.partner_debit_notes
 
 
 --
--- Name: partner_firm_inventory_items ux_partner_firm_inventory_items_catalog_mrp_discount; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: partner_firm_inventory_items ux_partner_firm_inventory_items_catalog_mrp_discount_tax; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.partner_firm_inventory_items
-    ADD CONSTRAINT ux_partner_firm_inventory_items_catalog_mrp_discount UNIQUE (firm_id, catalog_item_id, mrp, discount_percentage);
+    ADD CONSTRAINT ux_partner_firm_inventory_items_catalog_mrp_discount_tax UNIQUE (firm_id, catalog_item_id, mrp, discount_percentage, tax_percentage);
 
 
 --

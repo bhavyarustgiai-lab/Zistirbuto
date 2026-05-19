@@ -107,7 +107,7 @@ export function PartnerInvoiceDetailPage() {
     <PartnersPageShell>
       <div>
         <Link
-          to="/partners/invoices"
+          to="/partners/finance/invoices"
           className="inline-flex h-9 items-center rounded-lg px-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
         >
           <ArrowLeft className="mr-1.5 h-4 w-4" />
@@ -146,7 +146,7 @@ export function PartnerInvoiceDetailPage() {
           {invoice.item.orderId ? (
             <p className="mt-2">
               Created from order{" "}
-              <Link className="font-medium text-brand-600 hover:underline" to={`/partners/orders/${invoice.item.orderId}`}>
+              <Link className="font-medium text-brand-600 hover:underline" to={`/partners/sales/orders/${invoice.item.orderId}`}>
                 {invoice.item.dispatchReference || invoice.item.orderId}
               </Link>
             </p>

@@ -416,6 +416,18 @@ export const PartnerSupplierPaymentSchema = z.object({
   allocations: z.array(PartnerSupplierPaymentAllocationSchema),
 });
 
+export const CreatePartnerSupplierPaymentRequestSchema = z.object({
+  supplierInvoiceId: z.string().optional().or(z.literal("")),
+  supplierId: z.string().optional().or(z.literal("")),
+  paymentDate: z.string().min(1),
+  amount: z.number().positive(),
+  paymentMode: z.enum(["CASH", "UPI", "BANK_TRANSFER", "CHEQUE", "OTHER"]),
+  referenceNumber: z.string().optional().or(z.literal("")),
+  notes: z.string().optional().or(z.literal("")),
+}).refine((input) => Boolean(input.supplierInvoiceId || input.supplierId), {
+  message: "supplierInvoiceId or supplierId is required",
+});
+
 export const PartnerSupplierLedgerEntrySchema = z.object({
   id: z.string().min(1),
   firmId: z.number().int().positive(),
@@ -463,10 +475,8 @@ export const PartnerPurchaseSchema = z.object({
   supplierId: z.string().min(1),
   supplierName: z.string().min(1),
   supplierInvoiceNumber: z.string().optional().or(z.literal("")),
-  supplierInvoiceDate: z.string().optional().or(z.literal("")),
   purchaseDate: z.string().min(1),
-  expectedInwardDate: z.string().optional().or(z.literal("")),
-  status: z.enum(["DRAFT", "ORDERED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"]),
+  status: z.enum(["PLACED", "COMPLETED", "CANCELLED"]),
   createdAt: z.string().optional().or(z.literal("")),
   createdByName: z.string().optional().or(z.literal("")),
   orderedAt: z.string().optional().or(z.literal("")),
@@ -482,6 +492,70 @@ export const PartnerPurchaseSchema = z.object({
   totalAmount: z.number().nonnegative(),
   stockPosted: z.boolean(),
   items: z.array(PartnerPurchaseItemSchema),
+});
+
+export const PartnerSupplierReturnReasonSchema = z.enum(["DAMAGED", "WRONG_ITEM", "EXPIRED", "EXCESS_STOCK", "OTHER"]);
+
+export const PartnerSupplierReturnItemSchema = z.object({
+  id: z.string().min(1),
+  supplierReturnId: z.string().min(1),
+  itemId: z.string().min(1),
+  itemName: z.string().min(1),
+  sku: z.string().optional().or(z.literal("")),
+  mrp: z.number().nonnegative(),
+  discountPercentage: z.number().nonnegative(),
+  taxPercentage: z.number().nonnegative(),
+  quantity: z.number().int().positive(),
+  reason: PartnerSupplierReturnReasonSchema,
+  note: z.string().optional().or(z.literal("")),
+});
+
+export const PartnerSupplierReturnSchema = z.object({
+  id: z.string().min(1),
+  firmId: z.number().int().positive(),
+  returnNumber: z.string().min(1),
+  supplierId: z.string().min(1),
+  supplierName: z.string().min(1),
+  brandId: z.number().int().positive(),
+  brandName: z.string().min(1),
+  returnDate: z.string().min(1),
+  status: z.enum(["PLACED", "COMPLETED", "CANCELLED"]),
+  note: z.string().optional().or(z.literal("")),
+  createdAt: z.string().optional().or(z.literal("")),
+  createdByName: z.string().optional().or(z.literal("")),
+  lineCount: z.number().int().nonnegative(),
+  totalQuantity: z.number().int().nonnegative(),
+  items: z.array(PartnerSupplierReturnItemSchema),
+});
+
+export const CreatePartnerSupplierReturnRequestSchema = z.object({
+  supplierId: z.string().min(1),
+  brandId: z.union([z.string().min(1), z.number().int().positive()]),
+  returnDate: z.string().min(1),
+  note: z.string().optional().or(z.literal("")),
+  items: z.array(z.object({
+    itemId: z.string().min(1),
+    quantity: z.number().int().positive(),
+    reason: PartnerSupplierReturnReasonSchema,
+    note: z.string().optional().or(z.literal("")),
+  })).min(1),
+});
+
+export const CancelPartnerPurchaseRequestSchema = z.object({
+  reason: z.string().trim().min(1),
+});
+
+export const UpdatePartnerPurchaseRequestSchema = z.object({
+  supplierId: z.string().min(1),
+  supplierInvoiceNumber: z.string().optional().or(z.literal("")),
+  notes: z.string().optional().or(z.literal("")),
+  items: z.array(z.object({
+    itemId: z.string().min(1),
+    quantity: z.number().int().positive(),
+    costPrice: z.number().nonnegative(),
+    discountPercentage: z.number().min(0).max(100).optional(),
+    taxPercentage: z.number().min(0).max(100).optional(),
+  })).min(1),
 });
 
 export const PartnerGoodsReceiptItemSchema = z.object({
@@ -595,7 +669,7 @@ export const PartnerStockActionInputSchema = z.object({
   actionDate: z.string().min(1),
   note: z.string().optional().or(z.literal("")),
   referenceId: z.string().optional().or(z.literal("")),
-  referenceType: z.enum(["PURCHASE", "INVOICE", "ORDER", "PAYMENT", "MANUAL", "RETURN", "DAMAGE"]).optional(),
+  referenceType: z.enum(["PURCHASE", "INVOICE", "ORDER", "PAYMENT", "MANUAL", "RETURN", "SUPPLIER_RETURN", "DAMAGE"]).optional(),
   clientBusinessId: z.string().optional().or(z.literal("")),
   clientOutletId: z.string().optional().or(z.literal("")),
   supplierId: z.string().optional().or(z.literal("")),

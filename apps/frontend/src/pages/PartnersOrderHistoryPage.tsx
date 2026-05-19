@@ -214,7 +214,7 @@ export function PartnersOrderHistoryPage() {
                   <tr
                     key={order.id}
                     className="cursor-pointer border-b border-slate-100 text-slate-800 hover:bg-slate-50"
-                    onClick={() => navigate(`/partners/orders/${order.id}`)}
+                    onClick={() => navigate(`/partners/sales/orders/${order.id}`)}
                   >
                     <td className="px-4 py-4 font-medium text-slate-900">{order.orderNumber}</td>
                     <td className="px-4 py-4">{order.clientBusinessName}</td>

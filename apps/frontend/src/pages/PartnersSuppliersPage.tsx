@@ -2,11 +2,10 @@ import { useMemo, useState } from "react";
 import { PencilLine, Plus, Search } from "lucide-react";
 import { useAppState } from "@app/providers/AppStateProvider";
 import { usePartnerSuppliers } from "@entities/partners/hooks";
-import type { PartnerSupplierStatus } from "@shared/types/domain";
-import { Badge } from "@components/ui/badge";
 import { Button } from "@components/ui/button";
 import { Input } from "@components/ui/input";
 import { EmptyState } from "@shared/ui/molecules/EmptyState";
+import { PartnerStatusBadge } from "@features/partners/PartnerStatusBadge";
 import { SupplierFormDialog } from "@features/partners/SupplierFormDialog";
 import {
   PartnersPageFilters,
@@ -14,11 +13,6 @@ import {
   PartnersPageShell,
   PartnersTableCard,
 } from "@features/partners/layout/PartnersPageLayout";
-
-function tone(status: PartnerSupplierStatus) {
-  if (status === "ACTIVE") return "active";
-  return "inactive";
-}
 
 export function PartnersSuppliersPage() {
   const { activePartnerFirmId } = useAppState();
@@ -41,7 +35,7 @@ export function PartnersSuppliersPage() {
     <PartnersPageShell>
       <PartnersPageHeader
         title="Suppliers"
-        description="Manage upstream vendors and GSTIN-safe supplier records per firm."
+        description="Manage upstream businesses and GSTIN-safe supplier records per firm."
         actions={
           <Button
             className="h-11 w-full px-4 text-sm sm:w-auto"
@@ -60,7 +54,7 @@ export function PartnersSuppliersPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="pl-9"
-            placeholder="Search supplier or phone"
+            placeholder="Search business name or phone"
           />
         </div>
       </PartnersPageFilters>
@@ -68,7 +62,7 @@ export function PartnersSuppliersPage() {
       <PartnersTableCard>
         {suppliers.items.length === 0 ? (
           <div className="p-8">
-            <EmptyState>No suppliers yet for this firm.</EmptyState>
+            <EmptyState>No supplier businesses yet for this firm.</EmptyState>
           </div>
         ) : (
           <div>
@@ -90,9 +84,7 @@ export function PartnersSuppliersPage() {
                         {supplier.gstin || "GSTIN not set"}
                       </p>
                     </div>
-                    <Badge tone={tone(supplier.status)}>
-                      {supplier.status}
-                    </Badge>
+                    <PartnerStatusBadge status={supplier.status} />
                   </div>
 
                   <div className="mt-4 grid gap-3">
@@ -139,7 +131,7 @@ export function PartnersSuppliersPage() {
               <table className="w-full min-w-[1040px] text-sm">
                 <thead className="text-left text-slate-500">
                   <tr className="border-b border-slate-200 bg-slate-50/80">
-                    <th className="px-5 py-3">Supplier</th>
+                    <th className="px-5 py-3">Business name</th>
                     <th className="px-4 py-3">GSTIN</th>
                     <th className="px-4 py-3">Phone</th>
                     <th className="px-4 py-3">Address</th>
@@ -161,9 +153,7 @@ export function PartnersSuppliersPage() {
                       <td className="px-4 py-4">{supplier.phone || "-"}</td>
                       <td className="px-4 py-4">{supplier.address || "-"}</td>
                       <td className="px-4 py-4">
-                        <Badge tone={tone(supplier.status)}>
-                          {supplier.status}
-                        </Badge>
+                        <PartnerStatusBadge status={supplier.status} />
                       </td>
                       <td className="px-4 py-4">{supplier.updatedAt || "-"}</td>
                       <td className="px-5 py-4">

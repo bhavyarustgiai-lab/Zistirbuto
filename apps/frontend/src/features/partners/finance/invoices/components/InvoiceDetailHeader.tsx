@@ -43,7 +43,7 @@ export function InvoiceDetailHeader({ invoice, role, roleLoading, busy, onFinali
           {invoice.orderId ? (
             <p>
               Order reference{" "}
-              <Link className="font-medium text-brand-600 hover:underline" to={`/partners/orders/${invoice.orderId}`}>
+              <Link className="font-medium text-brand-600 hover:underline" to={`/partners/sales/orders/${invoice.orderId}`}>
                 {invoice.dispatchReference || invoice.orderId}
               </Link>
             </p>

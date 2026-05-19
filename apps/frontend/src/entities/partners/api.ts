@@ -43,12 +43,14 @@ import type {
   PartnerSupplierInvoice,
   PartnerSupplierLedgerEntry,
   PartnerSupplierPayment,
+  PartnerSupplierReturn,
   PartnerSupplierGSTINValidation,
   PartnerStockActionInput,
   PartnerStockLedgerEntry,
   PartnerStockLedgerFilters,
   PartnerStockReasonType,
   PartnerStockRow,
+  CreatePartnerSupplierReturnInput,
 } from "@shared/types/domain";
 
 const looseMockDb = mockDb as any;
@@ -624,7 +626,8 @@ export async function getPartnerSupplierPayments(
 export async function createPartnerSupplierPayment(
   firmId: NumericIdParam,
   input: {
-    supplierInvoiceId: string;
+    supplierInvoiceId?: string;
+    supplierId?: string;
     paymentDate: string;
     amount: number;
     paymentMode: PartnerPaymentMode;
@@ -887,9 +890,6 @@ export async function createPartnerPurchase(
     supplierId: string;
     purchaseNumber: string;
     supplierInvoiceNumber?: string;
-    supplierInvoiceDate?: string;
-    purchaseDate: string;
-    expectedInwardDate?: string;
     notes?: string;
     items: Array<{ itemId: string; quantity: number; costPrice: number; discountPercentage?: number; taxPercentage?: number }>;
   },
@@ -899,6 +899,25 @@ export async function createPartnerPurchase(
   }
   return http<PartnerPurchase>(`/partners/firms/${encodeURIComponent(firmId)}/purchases`, {
     method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updatePartnerPurchase(
+  firmId: NumericIdParam,
+  purchaseId: string,
+  input: {
+    supplierId: string;
+    supplierInvoiceNumber?: string;
+    notes?: string;
+    items: Array<{ itemId: string; quantity: number; costPrice: number; discountPercentage?: number; taxPercentage?: number }>;
+  },
+) {
+  if (env.useMocks) {
+    return looseMockDb.updatePartnerPurchase(firmId, purchaseId, input);
+  }
+  return http<PartnerPurchase>(`/partners/firms/${encodeURIComponent(firmId)}/purchases/${encodeURIComponent(purchaseId)}`, {
+    method: "PATCH",
     body: JSON.stringify(input),
   });
 }
@@ -939,15 +958,84 @@ export async function receivePartnerPurchase(
   });
 }
 
-export async function cancelPartnerPurchase(firmId: NumericIdParam, purchaseId: string) {
+export async function cancelPartnerPurchase(
+  firmId: NumericIdParam,
+  purchaseId: string,
+  input: { reason: string },
+) {
   if (env.useMocks) {
-    return looseMockDb.cancelPartnerPurchase(firmId, purchaseId);
+    return looseMockDb.cancelPartnerPurchase(firmId, purchaseId, input);
   }
   return http<PartnerPurchase>(`/partners/firms/${encodeURIComponent(firmId)}/purchases/${encodeURIComponent(purchaseId)}/cancel`, {
     method: "POST",
+    body: JSON.stringify(input),
   });
 }
 
+export async function getPartnerSupplierReturns(firmId: NumericIdParam, brandId: NumericIdParam | "" = "") {
+  if (env.useMocks) {
+    return looseMockDb.getPartnerSupplierReturns(firmId, brandId);
+  }
+  const query = brandId ? `?brandId=${encodeURIComponent(brandId)}` : "";
+  return http<PartnerSupplierReturn[]>(`/partners/firms/${encodeURIComponent(firmId)}/supplier-returns${query}`);
+}
+
+export async function getPartnerSupplierReturnById(firmId: NumericIdParam, returnId: string) {
+  if (env.useMocks) {
+    return looseMockDb.getPartnerSupplierReturnById(firmId, returnId);
+  }
+  return http<PartnerSupplierReturn>(`/partners/firms/${encodeURIComponent(firmId)}/supplier-returns/${encodeURIComponent(returnId)}`);
+}
+
+export async function createPartnerSupplierReturn(
+  firmId: NumericIdParam,
+  input: CreatePartnerSupplierReturnInput,
+) {
+  if (env.useMocks) {
+    return looseMockDb.createPartnerSupplierReturn(firmId, input);
+  }
+  return http<PartnerSupplierReturn>(`/partners/firms/${encodeURIComponent(firmId)}/supplier-returns`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updatePartnerSupplierReturn(
+  firmId: NumericIdParam,
+  returnId: string,
+  input: CreatePartnerSupplierReturnInput,
+) {
+  if (env.useMocks) {
+    return looseMockDb.updatePartnerSupplierReturn(firmId, returnId, input);
+  }
+  return http<PartnerSupplierReturn>(`/partners/firms/${encodeURIComponent(firmId)}/supplier-returns/${encodeURIComponent(returnId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function cancelPartnerSupplierReturn(firmId: NumericIdParam, returnId: string, input: { reason: string }) {
+  if (env.useMocks) {
+    return looseMockDb.cancelPartnerSupplierReturn(firmId, returnId, input);
+  }
+  return http<PartnerSupplierReturn>(
+    `/partners/firms/${encodeURIComponent(firmId)}/supplier-returns/${encodeURIComponent(returnId)}/cancel`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export async function completePartnerSupplierReturn(firmId: NumericIdParam, returnId: string) {
+  if (env.useMocks) {
+    return looseMockDb.completePartnerSupplierReturn(firmId, returnId);
+  }
+  return http<PartnerSupplierReturn>(
+    `/partners/firms/${encodeURIComponent(firmId)}/supplier-returns/${encodeURIComponent(returnId)}/complete`,
+    { method: "POST" },
+  );
+}
 
 export async function getPartnerStock(firmId: NumericIdParam, brandId: NumericIdParam | "" = "") {
   if (env.useMocks) {

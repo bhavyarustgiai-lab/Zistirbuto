@@ -48,7 +48,7 @@ export function GRNPrintView({ receipt, purchase }: Props) {
           <div className="rounded border border-slate-300 p-3">
             <p className="mb-1 text-[11px] font-semibold uppercase text-slate-500">Purchase</p>
             <p className="font-semibold">{value(purchase?.purchaseNumber)}</p>
-            <p>Expected inward: {formatDate(purchase?.expectedInwardDate)}</p>
+            <p>PO date: {formatDate(purchase?.purchaseDate)}</p>
           </div>
         </section>
 
