@@ -9,6 +9,7 @@ import (
 
 	backendphone "github.com/zistributo/zistributo/apps/backend/internal/common/phone"
 	partnerorders "github.com/zistributo/zistributo/apps/backend/internal/modules/partners/orders"
+	"github.com/zistributo/zistributo/apps/backend/internal/platform/auth"
 	"github.com/zistributo/zistributo/apps/backend/internal/sms"
 	"github.com/zistributo/zistributo/apps/backend/internal/store"
 )
@@ -19,11 +20,6 @@ type Handler struct {
 	exposeDevOTP bool
 }
 
-const (
-	sessionCookieName = "zistributo_session"
-	sessionTTL        = 7 * 24 * time.Hour
-)
-
 func RegisterRoutes(mux *http.ServeMux, prefix string, st *store.Store, otpService sms.AuthOTPService, exposeDevOTP bool) {
 	h := &Handler{
 		store:        st,
@@ -31,13 +27,21 @@ func RegisterRoutes(mux *http.ServeMux, prefix string, st *store.Store, otpServi
 		exposeDevOTP: exposeDevOTP,
 	}
 
+	registerCoreRoutes(mux, prefix, h)
+	registerLegacyPartnerRoutes(mux, prefix, h)
+	partnerorders.RegisterRoutes(mux, prefix, st)
+}
+
+func registerCoreRoutes(mux *http.ServeMux, prefix string, h *Handler) {
 	mux.HandleFunc("GET "+prefix+"/health", h.health)
 	mux.HandleFunc("POST "+prefix+"/auth/otp/request", h.requestLoginOTP)
 	mux.HandleFunc("POST "+prefix+"/auth/otp/verify", h.verifyLoginOTP)
 	mux.HandleFunc("PATCH "+prefix+"/auth/profile", h.updateAuthProfile)
 	mux.HandleFunc("POST "+prefix+"/auth/logout", h.logout)
 	mux.HandleFunc("GET "+prefix+"/me", h.getMe)
+}
 
+func registerLegacyPartnerRoutes(mux *http.ServeMux, prefix string, h *Handler) {
 	mux.HandleFunc("GET "+prefix+"/partners/me", h.getPartnersMe)
 	mux.HandleFunc("POST "+prefix+"/partners/firms", h.createPartnerFirm)
 	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}", h.getPartnerFirm)
@@ -63,14 +67,6 @@ func RegisterRoutes(mux *http.ServeMux, prefix string, st *store.Store, otpServi
 	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/client-businesses/{businessId}/outlets", h.addPartnerClientOutlet)
 	mux.HandleFunc("PATCH "+prefix+"/partners/firms/{firmId}/client-businesses/{businessId}/outlets/{outletId}", h.updatePartnerClientOutlet)
 	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/client-businesses/{businessId}/outlets/{outletId}/archive", h.archivePartnerClientOutlet)
-	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}/orders", h.getPartnerOrders)
-	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/orders", h.createPartnerOrder)
-	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}/orders/{orderId}", h.getPartnerOrderByID)
-	mux.HandleFunc("PUT "+prefix+"/partners/firms/{firmId}/orders/{orderId}", h.updatePartnerOrder)
-	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/orders/{orderId}/status", h.updatePartnerOrderStatus)
-	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}/orders/{orderId}/returns", h.getPartnerOrderReturns)
-	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/orders/{orderId}/returns", h.createPartnerOrderReturn)
-	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/orders/{orderId}/returns/{returnId}/void", h.voidPartnerOrderReturn)
 	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}/receivables", h.getPartnerReceivablesSummary)
 	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}/payments", h.getPartnerPayments)
 	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/payments", h.createPartnerPayment)
@@ -211,7 +207,7 @@ func (h *Handler) verifyLoginOTP(w http.ResponseWriter, r *http.Request) {
 		}
 		user = result.User
 	}
-	session, err := h.store.CreateSession(user.ID, sessionTTL)
+	session, err := h.store.CreateSession(user.ID, auth.SessionTTL)
 	if err != nil {
 		internalError(w, err)
 		return
@@ -1872,205 +1868,6 @@ func (h *Handler) revertPartnerSupplyInward(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, item)
 }
 
-func (h *Handler) getPartnerOrders(w http.ResponseWriter, r *http.Request) {
-	st, ok := h.authedStore(w, r)
-	if !ok {
-		return
-	}
-	firmID := r.PathValue("firmId")
-	if firmID == "" {
-		badRequest(w, "firmId is required")
-		return
-	}
-	if !st.UserHasPartnerFirmAccess(firmID) {
-		forbidden(w, "firm access denied")
-		return
-	}
-	items, err := st.GetPartnerOrders(firmID)
-	if err != nil {
-		internalError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-
-func (h *Handler) createPartnerOrder(w http.ResponseWriter, r *http.Request) {
-	st, ok := h.authedStore(w, r)
-	if !ok {
-		return
-	}
-	firmID := r.PathValue("firmId")
-	if firmID == "" {
-		badRequest(w, "firmId is required")
-		return
-	}
-	if !st.UserHasPartnerFirmAccess(firmID) {
-		forbidden(w, "firm access denied")
-		return
-	}
-	var req store.CreatePartnerOrderInput
-	if err := decodeJSON(r, &req); err != nil {
-		badRequest(w, err.Error())
-		return
-	}
-	item, err := st.CreatePartnerOrder(firmID, req)
-	if err != nil {
-		badRequest(w, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-
-func (h *Handler) getPartnerOrderByID(w http.ResponseWriter, r *http.Request) {
-	st, ok := h.authedStore(w, r)
-	if !ok {
-		return
-	}
-	firmID := r.PathValue("firmId")
-	orderID := r.PathValue("orderId")
-	if firmID == "" || orderID == "" {
-		badRequest(w, "firmId and orderId are required")
-		return
-	}
-	if !st.UserHasPartnerFirmAccess(firmID) {
-		forbidden(w, "firm access denied")
-		return
-	}
-	item, err := st.GetPartnerOrderByID(firmID, orderID)
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			notFound(w, err.Error())
-			return
-		}
-		internalError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-
-func (h *Handler) updatePartnerOrder(w http.ResponseWriter, r *http.Request) {
-	st, ok := h.authedStore(w, r)
-	if !ok {
-		return
-	}
-	firmID := r.PathValue("firmId")
-	orderID := r.PathValue("orderId")
-	if firmID == "" || orderID == "" {
-		badRequest(w, "firmId and orderId are required")
-		return
-	}
-	if !st.UserHasPartnerFirmAccess(firmID) {
-		forbidden(w, "firm access denied")
-		return
-	}
-	var req store.UpdatePartnerOrderInput
-	if err := decodeJSON(r, &req); err != nil {
-		badRequest(w, err.Error())
-		return
-	}
-	item, err := st.UpdatePartnerOrder(firmID, orderID, req)
-	if err != nil {
-		badRequest(w, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-
-func (h *Handler) updatePartnerOrderStatus(w http.ResponseWriter, r *http.Request) {
-	st, ok := h.authedStore(w, r)
-	if !ok {
-		return
-	}
-	partnerorders.NewHandler(st).UpdateStatus(w, r)
-}
-
-func (h *Handler) getPartnerOrderReturns(w http.ResponseWriter, r *http.Request) {
-	st, ok := h.authedStore(w, r)
-	if !ok {
-		return
-	}
-	firmID := r.PathValue("firmId")
-	orderID := r.PathValue("orderId")
-	if firmID == "" || orderID == "" {
-		badRequest(w, "firmId and orderId are required")
-		return
-	}
-	if !st.UserHasPartnerFirmAccess(firmID) {
-		forbidden(w, "firm access denied")
-		return
-	}
-	items, err := st.GetPartnerOrderReturns(firmID, orderID)
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			notFound(w, err.Error())
-			return
-		}
-		internalError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-
-func (h *Handler) createPartnerOrderReturn(w http.ResponseWriter, r *http.Request) {
-	st, ok := h.authedStore(w, r)
-	if !ok {
-		return
-	}
-	firmID := r.PathValue("firmId")
-	orderID := r.PathValue("orderId")
-	if firmID == "" || orderID == "" {
-		badRequest(w, "firmId and orderId are required")
-		return
-	}
-	if !st.UserHasPartnerFirmAccess(firmID) {
-		forbidden(w, "firm access denied")
-		return
-	}
-	var req store.CreatePartnerOrderReturnInput
-	if err := decodeJSON(r, &req); err != nil {
-		badRequest(w, err.Error())
-		return
-	}
-	item, err := st.CreatePartnerOrderReturn(firmID, orderID, req)
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			notFound(w, err.Error())
-			return
-		}
-		badRequest(w, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusCreated, item)
-}
-
-func (h *Handler) voidPartnerOrderReturn(w http.ResponseWriter, r *http.Request) {
-	st, ok := h.authedStore(w, r)
-	if !ok {
-		return
-	}
-	firmID := r.PathValue("firmId")
-	orderID := r.PathValue("orderId")
-	returnID := r.PathValue("returnId")
-	if firmID == "" || orderID == "" || returnID == "" {
-		badRequest(w, "firmId, orderId and returnId are required")
-		return
-	}
-	if !st.UserHasPartnerFirmAccess(firmID) {
-		forbidden(w, "firm access denied")
-		return
-	}
-	item, err := st.VoidPartnerOrderReturn(firmID, orderID, returnID)
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			notFound(w, err.Error())
-			return
-		}
-		badRequest(w, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-
 func (h *Handler) getPartnerReceivablesSummary(w http.ResponseWriter, r *http.Request) {
 	st, ok := h.authedStore(w, r)
 	if !ok {
@@ -3028,47 +2825,24 @@ func unauthorized(w http.ResponseWriter, message string) {
 }
 
 func (h *Handler) sessionTokenFromRequest(r *http.Request) string {
-	cookie, err := r.Cookie(sessionCookieName)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(cookie.Value)
+	return auth.TokenFromRequest(r)
 }
 
 func (h *Handler) authedStore(w http.ResponseWriter, r *http.Request) (*store.Store, bool) {
-	token := h.sessionTokenFromRequest(r)
-	if token == "" {
-		unauthorized(w, "authentication required")
-		return nil, false
-	}
-	user, err := h.store.UserBySessionToken(token)
+	st, err := auth.StoreForRequest(r, h.store)
 	if err != nil {
 		unauthorized(w, "authentication required")
 		return nil, false
 	}
-	return h.store.ForUser(user), true
+	return st, true
 }
 
 func (h *Handler) setSessionCookie(w http.ResponseWriter, token string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(sessionTTL.Seconds()),
-	})
+	auth.SetSessionCookie(w, token)
 }
 
 func (h *Handler) clearSessionCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-	})
+	auth.ClearSessionCookie(w)
 }
 
 func (h *Handler) canManageUsers(st *store.Store, entityID string) bool {

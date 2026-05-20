@@ -20,9 +20,37 @@ func NewRepository(st *store.Store) *Repository {
 	return &Repository{pool: st.Pool(), store: st}
 }
 
+func (r *Repository) List(ctx context.Context, firmID string) ([]Order, error) {
+	return r.store.GetPartnerOrders(firmID)
+}
+
+func (r *Repository) Create(ctx context.Context, firmID string, input CreateRequest) (Order, error) {
+	return r.store.CreatePartnerOrder(firmID, input)
+}
+
 func (r *Repository) GetByID(ctx context.Context, firmID, orderID string) (Order, error) {
 	// TODO: move the order detail query from internal/store into this repository.
 	return r.store.GetPartnerOrderByID(firmID, orderID)
+}
+
+func (r *Repository) Update(ctx context.Context, firmID, orderID string, input UpdateRequest) (Order, error) {
+	return r.store.UpdatePartnerOrder(firmID, orderID, input)
+}
+
+func (r *Repository) UpdateStatusWithInput(ctx context.Context, firmID, orderID string, input StatusRequest) (Order, error) {
+	return r.store.UpdatePartnerOrderStatusWithInput(firmID, orderID, input)
+}
+
+func (r *Repository) ListReturns(ctx context.Context, firmID, orderID string) ([]Return, error) {
+	return r.store.GetPartnerOrderReturns(firmID, orderID)
+}
+
+func (r *Repository) CreateReturn(ctx context.Context, firmID, orderID string, input CreateReturnRequest) (ReturnResponse, error) {
+	return r.store.CreatePartnerOrderReturn(firmID, orderID, input)
+}
+
+func (r *Repository) VoidReturn(ctx context.Context, firmID, orderID, returnID string) (ReturnResponse, error) {
+	return r.store.VoidPartnerOrderReturn(firmID, orderID, returnID)
 }
 
 func (r *Repository) UpdateStatus(ctx context.Context, firmID, orderID, nextStatus string) error {
