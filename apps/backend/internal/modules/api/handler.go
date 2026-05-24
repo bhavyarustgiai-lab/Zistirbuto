@@ -117,7 +117,6 @@ func registerLegacyPartnerRoutes(mux *http.ServeMux, prefix string, h *Handler) 
 	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/inventory", h.createPartnerInventory)
 	mux.HandleFunc("PATCH "+prefix+"/partners/firms/{firmId}/inventory/{itemId}", h.updatePartnerInventory)
 	mux.HandleFunc("GET "+prefix+"/partners/firms/{firmId}/inventory/history", h.getPartnerInventoryHistory)
-	mux.HandleFunc("POST "+prefix+"/partners/firms/{firmId}/inventory/supply-inwards/{supplyInwardId}/revert", h.revertPartnerSupplyInward)
 }
 
 func (h *Handler) health(w http.ResponseWriter, _ *http.Request) {
@@ -1834,38 +1833,6 @@ func (h *Handler) getPartnerInventoryHistory(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
-}
-
-func (h *Handler) revertPartnerSupplyInward(w http.ResponseWriter, r *http.Request) {
-	st, ok := h.authedStore(w, r)
-	if !ok {
-		return
-	}
-	firmID := r.PathValue("firmId")
-	supplyInwardID := r.PathValue("supplyInwardId")
-	if firmID == "" || supplyInwardID == "" {
-		badRequest(w, "firmId and supplyInwardId are required")
-		return
-	}
-	if !st.UserHasPartnerFirmAccess(firmID) {
-		forbidden(w, "firm access denied")
-		return
-	}
-	var req struct {
-		Reason string `json:"reason"`
-	}
-	if r.ContentLength > 0 {
-		if err := decodeJSON(r, &req); err != nil {
-			badRequest(w, err.Error())
-			return
-		}
-	}
-	item, err := st.RevertPartnerSupplyInward(firmID, supplyInwardID, req.Reason)
-	if err != nil {
-		badRequest(w, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
 }
 
 func (h *Handler) getPartnerReceivablesSummary(w http.ResponseWriter, r *http.Request) {

@@ -92,7 +92,6 @@ import {
   getPartnerSupplierReturns,
   getPartnerInventory,
   getPartnerInventoryHistory,
-  revertPartnerSupplyInward,
   getPartnerOrderById,
   getPartnerOrders,
   getPartnerReceivablesSummary,
@@ -1468,10 +1467,6 @@ export function usePartnerInventoryHistory(
   return {
     items,
     refresh,
-    revertSupplyInward: async (supplyInwardId: string, reason = "") => {
-      await revertPartnerSupplyInward(firmId, supplyInwardId, reason);
-      await refresh();
-    },
   };
 }
 

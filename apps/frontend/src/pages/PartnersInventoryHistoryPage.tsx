@@ -12,12 +12,8 @@ import {
   PartnersTableCard,
 } from "@features/partners/layout/PartnersPageLayout";
 import { EmptyState } from "@shared/ui/molecules/EmptyState";
-import { Button } from "@components/ui/button";
-import { Dialog } from "@components/ui/dialog";
 import { Input } from "@components/ui/input";
-import { Textarea } from "@components/ui/textarea";
 import { todayISO } from "@shared/lib/date";
-import { StatusDialog } from "@shared/ui/molecules/status-dialog";
 
 function offsetDateISO(days: number) {
   const now = new Date();
@@ -53,10 +49,6 @@ export function PartnersInventoryHistoryPage() {
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState(offsetDateISO(-1));
   const [toDate, setToDate] = useState(todayISO());
-  const [revertingEntryId, setRevertingEntryId] = useState("");
-  const [revertReason, setRevertReason] = useState("");
-  const [revertSaving, setRevertSaving] = useState(false);
-  const [statusDialog, setStatusDialog] = useState<{ tone: "success" | "error"; title: string; description?: string } | null>(null);
 
   const history = usePartnerInventoryHistory(activePartnerFirmId, {
     brandId: selectedBrandId,
@@ -78,7 +70,6 @@ export function PartnersInventoryHistoryPage() {
       })),
     [history.items],
   );
-  const revertingEntry = rows.find((item) => item.id === revertingEntryId) ?? null;
 
   if (!activePartnerFirmId) {
     return <EmptyState>Select a firm to view history.</EmptyState>;
@@ -124,7 +115,7 @@ export function PartnersInventoryHistoryPage() {
           headers={["Date & Time", "Items", "Activity", "Source", "Quantity", "Note", "Status"]}
           rows={rows.map((item) => [
             formatDateTime(item.eventAt),
-            item.eventType === "SUPPLY_INWARD"
+            item.eventType === "GOODS_RECEIPT"
               ? (item.items ?? []).map((line) => `${line.itemName} (${line.sku}) x ${line.quantity}`).join(" | ")
               : `${item.itemName ?? ""} (${item.sku ?? ""})`,
             item.activityLabel,
@@ -164,7 +155,7 @@ export function PartnersInventoryHistoryPage() {
                   <tr key={`${item.eventType}_${item.id}`} className="border-b border-slate-100 text-slate-800 last:border-b-0">
                     <td className="px-4 py-4 whitespace-nowrap text-slate-600">{formatDateTime(item.eventAt)}</td>
                     <td className="px-4 py-4">
-                      {item.eventType === "SUPPLY_INWARD" ? (
+                      {item.eventType === "GOODS_RECEIPT" ? (
                         <div className="space-y-2">
                           {(item.items ?? []).map((line) => (
                             <div key={`${item.id}_${line.itemId}_${line.sku}`}>
@@ -185,7 +176,7 @@ export function PartnersInventoryHistoryPage() {
                     <td className="px-4 py-4">{item.activityLabel}</td>
                     <td className="px-4 py-4">
                       <div className="text-slate-900">{item.sourceLabel}</div>
-                      {item.eventType === "SUPPLY_INWARD" && item.status ? (
+                      {item.eventType === "GOODS_RECEIPT" && item.status ? (
                         <div className="mt-1 text-xs text-slate-500">{item.status}</div>
                       ) : null}
                     </td>
@@ -195,24 +186,10 @@ export function PartnersInventoryHistoryPage() {
                       </span>
                     </td>
                     <td className="px-4 py-4 text-slate-600">
-                      {item.note || item.revertReason || "-"}
+                      {item.note || "-"}
                     </td>
                     <td className="px-4 py-4 text-right">
-                      {item.eventType === "SUPPLY_INWARD" ? (
-                        <Button
-                          variant="outline"
-                          className="h-9 rounded-2xl px-3 text-sm"
-                          disabled={item.status !== "POSTED" || !item.canRevert}
-                          onClick={() => {
-                            setRevertingEntryId(item.id);
-                            setRevertReason("");
-                          }}
-                        >
-                          Revert
-                        </Button>
-                      ) : (
-                        <span className="text-slate-300">-</span>
-                      )}
+                      <span className="text-slate-300">-</span>
                     </td>
                   </tr>
                 ))}
@@ -221,75 +198,6 @@ export function PartnersInventoryHistoryPage() {
           </div>
         )}
       </PartnersTableCard>
-
-      <Dialog open={Boolean(revertingEntry)} onClose={() => setRevertingEntryId("")} title="Revert Receipt">
-        {revertingEntry ? (
-          <div className="space-y-4">
-            <p className="text-sm text-slate-600">
-              This will revert the full receipt transaction for <span className="font-medium text-slate-900">{revertingEntry.supplierName}</span>.
-              Revert is allowed only because all involved items can stay at zero or above.
-            </p>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="space-y-2">
-                {(revertingEntry.items ?? []).map((line) => (
-                  <div key={`${revertingEntry.id}_${line.itemId}`} className="flex items-start justify-between gap-3 text-sm">
-                    <div>
-                      <div className="font-medium text-slate-900">{line.itemName}</div>
-                      <div className="text-xs text-slate-500">SKU {line.sku}</div>
-                    </div>
-                    <div className="font-semibold text-slate-900">Qty {line.quantity}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-900">Revert note</label>
-              <Textarea
-                value={revertReason}
-                onChange={(event) => setRevertReason(event.target.value)}
-                placeholder="Optional reason for reverting this receipt"
-                className="min-h-[100px]"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" className="h-10 px-4" onClick={() => setRevertingEntryId("")}>
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                className="h-10 px-4"
-                disabled={revertSaving}
-                onClick={async () => {
-                  setRevertSaving(true);
-                  try {
-                    await history.revertSupplyInward(revertingEntry.id, revertReason.trim());
-                    setRevertingEntryId("");
-                    setRevertReason("");
-                    setStatusDialog({ tone: "success", title: "Receipt reverted successfully" });
-                  } catch (error) {
-                    setStatusDialog({
-                      tone: "error",
-                      title: "Receipt revert failed",
-                      description: error instanceof Error ? error.message : "Failed to revert receipt",
-                    });
-                  } finally {
-                    setRevertSaving(false);
-                  }
-                }}
-              >
-                Confirm Revert
-              </Button>
-            </div>
-          </div>
-        ) : null}
-      </Dialog>
-      <StatusDialog
-        open={Boolean(statusDialog)}
-        tone={statusDialog?.tone ?? "success"}
-        title={statusDialog?.title ?? ""}
-        description={statusDialog?.description}
-        onClose={() => setStatusDialog(null)}
-      />
     </PartnersPageShell>
   );
 }

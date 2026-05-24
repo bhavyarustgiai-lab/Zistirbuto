@@ -1127,19 +1127,6 @@ export async function getPartnerInventoryHistory(
   );
 }
 
-export async function revertPartnerSupplyInward(firmId: NumericIdParam, supplyInwardId: string, reason = "") {
-  if (env.useMocks) {
-    return looseMockDb.revertPartnerSupplyInward(firmId, supplyInwardId, reason);
-  }
-  return http<PartnerInventoryHistoryEntry>(
-    `/partners/firms/${encodeURIComponent(firmId)}/inventory/supply-inwards/${encodeURIComponent(supplyInwardId)}/revert`,
-    {
-      method: "POST",
-      body: JSON.stringify({ reason }),
-    },
-  );
-}
-
 export async function updatePartnerInventory(firmId: NumericIdParam, itemId: string, input: PartnerInventoryUpdateInput) {
   if (env.useMocks) {
     return looseMockDb.updatePartnerInventory(firmId, itemId, input);

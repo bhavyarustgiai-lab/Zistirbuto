@@ -24,7 +24,6 @@ import type {
   PartnerGoodsReceipt,
   PartnerInventoryHistoryEntry,
   PartnerInventoryItem,
-  PartnerInventoryReceipt,
   PartnerInventoryUpdateInput,
   PartnerInvoice,
   PartnerInvoiceItem,
@@ -467,72 +466,6 @@ let partnerFirmInventoryItems: PartnerInventoryItem[] = [
     lastSupplierId: "psup_3",
     lastSupplierName: "Northern Haircare Depot",
     lastReceivedAt: new Date().toISOString(),
-  },
-];
-
-let partnerInventoryReceipts: PartnerInventoryReceipt[] = [
-  { id: "prec_1", firmId: 1, supplyInwardId: "psi_1", itemId: "pfi_1", supplierId: "psup_1", supplierName: "Prime Beauty Supply", quantity: 24, receivedAt: new Date().toISOString(), note: "Opening receipt", status: "POSTED", createdAt: new Date().toISOString() },
-  { id: "prec_2", firmId: 1, supplyInwardId: "psi_2", itemId: "pfi_2", supplierId: "psup_1", supplierName: "Prime Beauty Supply", quantity: 12, receivedAt: new Date().toISOString(), note: "Opening receipt", status: "POSTED", createdAt: new Date().toISOString() },
-  { id: "prec_3", firmId: 1, supplyInwardId: "psi_3", itemId: "pfi_3", supplierId: "psup_2", supplierName: "Salon Source India", quantity: 18, receivedAt: new Date().toISOString(), note: "Opening receipt", status: "POSTED", createdAt: new Date().toISOString() },
-  { id: "prec_4", firmId: 3, supplyInwardId: "psi_4", itemId: "pfi_4", supplierId: "psup_3", supplierName: "Northern Haircare Depot", quantity: 9, receivedAt: new Date().toISOString(), note: "Opening receipt", status: "POSTED", createdAt: new Date().toISOString() },
-];
-
-let partnerSupplyInwards: Array<{
-  id: string;
-  firmId: number;
-  brandId: number;
-  supplierId: string;
-  supplierName: string;
-  receivedAt: string;
-  note: string;
-  status: "POSTED" | "REVERTED";
-  revertedAt?: string;
-  revertReason?: string;
-  createdAt: string;
-}> = [
-  {
-    id: "psi_1",
-    firmId: 1,
-    brandId: 1,
-    supplierId: "psup_1",
-    supplierName: "Prime Beauty Supply",
-    receivedAt: partnerInventoryReceipts[0].receivedAt,
-    note: "Opening receipt",
-    status: "POSTED",
-    createdAt: partnerInventoryReceipts[0].createdAt,
-  },
-  {
-    id: "psi_2",
-    firmId: 1,
-    brandId: 1,
-    supplierId: "psup_1",
-    supplierName: "Prime Beauty Supply",
-    receivedAt: partnerInventoryReceipts[1].receivedAt,
-    note: "Opening receipt",
-    status: "POSTED",
-    createdAt: partnerInventoryReceipts[1].createdAt,
-  },
-  {
-    id: "psi_3",
-    firmId: 1,
-    brandId: 2,
-    supplierId: "psup_2",
-    supplierName: "Salon Source India",
-    receivedAt: partnerInventoryReceipts[2].receivedAt,
-    note: "Opening receipt",
-    status: "POSTED",
-    createdAt: partnerInventoryReceipts[2].createdAt,
-  },
-  {
-    id: "psi_4",
-    firmId: 3,
-    brandId: 5,
-    supplierId: "psup_3",
-    supplierName: "Northern Haircare Depot",
-    receivedAt: partnerInventoryReceipts[3].receivedAt,
-    note: "Opening receipt",
-    status: "POSTED",
-    createdAt: partnerInventoryReceipts[3].createdAt,
   },
 ];
 
@@ -2950,60 +2883,37 @@ export const mockDb = {
     filters: { brandId?: string; fromDate?: string; toDate?: string; query?: string } = {},
   ) {
     await wait();
-    const supplyInwards: PartnerInventoryHistoryEntry[] = partnerSupplyInwards
-      .filter((item) => item.firmId === firmId)
-      .map((item) => {
-        const lines = partnerInventoryReceipts
-          .filter((receipt) => receipt.firmId === firmId && receipt.supplyInwardId === item.id)
-          .map((receipt) => {
-            const inventoryItem = partnerFirmInventoryItems.find((candidate) => candidate.firmId === firmId && candidate.itemId === receipt.itemId);
+    const grns: PartnerInventoryHistoryEntry[] = partnerGoodsReceipts
+      .filter((receipt) => receipt.firmId === firmId)
+      .map((receipt) => {
+        const lines = receipt.items
+          .filter((line) => line.receivedQuantity > 0)
+          .map((line) => {
+            const inventoryItem = partnerFirmInventoryItems.find((candidate) => candidate.firmId === firmId && candidate.itemId === line.itemId);
             return {
-              itemId: receipt.itemId,
+              itemId: line.itemId,
               catalogItemId: inventoryItem?.catalogItemId ?? "",
-              itemName: inventoryItem?.itemName ?? "",
-              sku: inventoryItem?.sku ?? "",
-              quantity: receipt.quantity,
+              itemName: line.itemName,
+              sku: line.sku ?? "",
+              quantity: line.receivedQuantity,
             };
           });
-        const lineTotals = new Map<string, number>();
-        for (const line of lines) {
-          const key = `${line.itemId}:${line.catalogItemId}`;
-          lineTotals.set(key, (lineTotals.get(key) ?? 0) + line.quantity);
-        }
-        const itemsSummary = Array.from(lineTotals.entries()).map(([key, quantity]) => {
-          const [itemId, catalogItemId] = key.split(":");
-          const base = lines.find((line) => line.itemId === itemId && line.catalogItemId === catalogItemId);
-          return {
-            itemId,
-            catalogItemId,
-            itemName: base?.itemName ?? "",
-            sku: base?.sku ?? "",
-            quantity,
-          };
-        }).sort((a, b) => a.itemName.localeCompare(b.itemName) || a.sku.localeCompare(b.sku));
-        const canRevert =
-          item.status === "POSTED" &&
-          itemsSummary.every((line) => {
-            const current = partnerFirmInventoryItems.find((candidate) => candidate.firmId === firmId && candidate.itemId === line.itemId);
-            return (current?.quantity ?? 0) >= line.quantity;
-          });
+        const firstInventoryItem = partnerFirmInventoryItems.find((item) => item.firmId === firmId && item.itemId === lines[0]?.itemId);
         return {
-          id: item.id,
+          id: receipt.id,
           firmId,
-          brandId: item.brandId,
-          eventType: "SUPPLY_INWARD",
-          quantityDelta: itemsSummary.reduce((sum, line) => sum + line.quantity, 0),
-          supplierId: item.supplierId,
-          supplierName: item.supplierName,
-          note: item.note,
-          status: item.status,
-          canRevert,
-          revertedAt: item.revertedAt,
-          revertReason: item.revertReason,
-          eventAt: item.createdAt,
-          items: itemsSummary,
+          brandId: firstInventoryItem?.brandId ?? 0,
+          eventType: "GOODS_RECEIPT",
+          quantityDelta: lines.reduce((sum, line) => sum + line.quantity, 0),
+          supplierId: receipt.supplierId,
+          supplierName: receipt.supplierName,
+          note: [receipt.grnNumber, receipt.notes].filter(Boolean).join(" · "),
+          status: "POSTED",
+          eventAt: receipt.createdAt,
+          items: lines,
         };
-      });
+      })
+      .filter((item) => item.quantityDelta > 0);
 
     const adjustments: PartnerInventoryHistoryEntry[] = partnerInventoryAdjustments
       .filter((item) => item.firmId === firmId)
@@ -3027,8 +2937,8 @@ export const mockDb = {
       });
 
     const query = filters.query?.trim().toLowerCase() || "";
-    return [...supplyInwards, ...adjustments]
-      .filter((item) => !filters.brandId || item.brandId === filters.brandId)
+    return [...grns, ...adjustments]
+      .filter((item) => !filters.brandId || String(item.brandId) === String(filters.brandId))
       .filter((item) => !filters.fromDate || item.eventAt.slice(0, 10) >= filters.fromDate)
       .filter((item) => !filters.toDate || item.eventAt.slice(0, 10) <= filters.toDate)
       .filter((item) => {
@@ -3038,79 +2948,6 @@ export const mockDb = {
           .some((value) => value.toLowerCase().includes(query));
       })
       .sort((a, b) => b.eventAt.localeCompare(a.eventAt) || b.id.localeCompare(a.id));
-  },
-
-  async revertPartnerSupplyInward(firmId: number, supplyInwardId: string, reason: string) {
-    await wait();
-    const inward = partnerSupplyInwards.find((item) => item.firmId === firmId && item.id === supplyInwardId);
-    if (!inward) {
-      throw new Error("Supply inward not found");
-    }
-    if (inward.status !== "POSTED") {
-      throw new Error("Supply inward is already reverted");
-    }
-    const groupedLines = partnerInventoryReceipts
-      .filter((item) => item.firmId === firmId && item.supplyInwardId === supplyInwardId)
-      .reduce((map, item) => {
-        map.set(item.itemId, (map.get(item.itemId) ?? 0) + item.quantity);
-        return map;
-      }, new Map<string, number>());
-    for (const [itemId, quantity] of groupedLines.entries()) {
-      const inventoryItem = partnerFirmInventoryItems.find((item) => item.firmId === firmId && item.itemId === itemId);
-      if (!inventoryItem || inventoryItem.quantity- quantity < 0) {
-        throw new Error("Cannot revert supply inward because one or more items would become negative");
-      }
-    }
-    const revertedAt = new Date().toISOString();
-    partnerFirmInventoryItems = partnerFirmInventoryItems.map((item) => {
-      const revertQuantity = groupedLines.get(item.itemId);
-      if (item.firmId !== firmId || revertQuantity == null) {
-        return item;
-      }
-      return {
-        ...item,
-        quantity: item.quantity - revertQuantity,
-        updatedAt: revertedAt,
-      };
-    });
-    partnerSupplyInwards = partnerSupplyInwards.map((item) =>
-      item.id === supplyInwardId
-        ? {
-            ...item,
-            status: "REVERTED",
-            revertedAt,
-            revertReason: reason.trim() || "",
-          }
-        : item,
-    );
-    partnerInventoryReceipts = partnerInventoryReceipts.map((item) =>
-      item.supplyInwardId === supplyInwardId
-        ? {
-            ...item,
-            status: "VOIDED",
-            voidedAt: revertedAt,
-            voidReason: reason.trim() || "",
-          }
-        : item,
-    );
-    const entries = await this.getPartnerInventoryHistory(firmId, {});
-    const entry = entries.find((item) => item.id === supplyInwardId && item.eventType === "SUPPLY_INWARD");
-    return entry ?? {
-      id: supplyInwardId,
-      firmId,
-      brandId: inward.brandId,
-      eventType: "SUPPLY_INWARD",
-      quantityDelta: 0,
-      supplierId: inward.supplierId,
-      supplierName: inward.supplierName,
-      note: inward.note,
-      status: "REVERTED",
-      canRevert: false,
-      revertedAt,
-      revertReason: reason.trim() || "",
-      eventAt: inward.receivedAt,
-      items: [],
-    };
   },
 
   async getPartnerOrders(firmId: number) {

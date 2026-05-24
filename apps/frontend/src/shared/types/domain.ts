@@ -335,22 +335,6 @@ export type PartnerInventoryItem = {
   lastReceivedAt?: string;
 };
 
-export type PartnerInventoryReceipt = {
-  id: string;
-  firmId: number;
-  supplyInwardId?: string;
-  itemId: string;
-  supplierId: string;
-  supplierName: string;
-  quantity: number;
-  receivedAt: string;
-  note?: string;
-  status: "POSTED" | "VOIDED";
-  voidedAt?: string;
-  voidReason?: string;
-  createdAt: string;
-};
-
 export type PartnerInventoryHistoryEntry = {
   id: string;
   firmId: number;
@@ -359,17 +343,14 @@ export type PartnerInventoryHistoryEntry = {
   catalogItemId?: string;
   itemName?: string;
   sku?: string;
-  eventType: "GOODS_RECEIPT" | "SUPPLY_INWARD" | "ADJUSTMENT";
+  eventType: "GOODS_RECEIPT" | "ADJUSTMENT";
   quantityDelta: number;
   quantityFrom?: number;
   quantityTo?: number;
   supplierId?: string;
   supplierName?: string;
   note?: string;
-  status?: "POSTED" | "REVERTED";
-  canRevert?: boolean;
-  revertedAt?: string;
-  revertReason?: string;
+  status?: "POSTED";
   eventAt: string;
   items?: PartnerInventoryHistoryLine[];
 };

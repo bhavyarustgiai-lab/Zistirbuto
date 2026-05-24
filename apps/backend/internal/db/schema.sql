@@ -505,10 +505,9 @@ CREATE TABLE public.partner_inventory_receipts (
     note text,
     created_by bigint,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    status text DEFAULT 'PLACED'::text NOT NULL,
+    status text DEFAULT 'POSTED'::text NOT NULL,
     voided_at timestamp with time zone,
     void_reason text,
-    supply_inward_id text,
     CONSTRAINT partner_inventory_receipts_quantity_check CHECK ((quantity > 0)),
     CONSTRAINT partner_inventory_receipts_status_check CHECK ((status = ANY (ARRAY['POSTED'::text, 'VOIDED'::text])))
 );
@@ -1091,26 +1090,6 @@ CREATE TABLE public.partner_supplier_return_items (
 
 
 --
--- Name: partner_supply_inwards; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.partner_supply_inwards (
-    id text NOT NULL,
-    firm_id bigint NOT NULL,
-    brand_id bigint NOT NULL,
-    supplier_id text NOT NULL,
-    received_at timestamp with time zone NOT NULL,
-    note text,
-    status text DEFAULT 'POSTED'::text NOT NULL,
-    reverted_at timestamp with time zone,
-    revert_reason text,
-    created_by bigint,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT partner_supply_inwards_status_check CHECK ((status = ANY (ARRAY['POSTED'::text, 'REVERTED'::text])))
-);
-
-
---
 -- Name: partner_unfulfilled_order_items; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1619,14 +1598,6 @@ ALTER TABLE ONLY public.partner_supplier_payments
 
 ALTER TABLE ONLY public.partner_suppliers
     ADD CONSTRAINT partner_suppliers_pkey PRIMARY KEY (id);
-
-
---
--- Name: partner_supply_inwards partner_supply_inwards_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.partner_supply_inwards
-    ADD CONSTRAINT partner_supply_inwards_pkey PRIMARY KEY (id);
 
 
 --
@@ -2174,13 +2145,6 @@ CREATE INDEX idx_partner_inventory_receipts_supplier_received ON public.partner_
 
 
 --
--- Name: idx_partner_inventory_receipts_supply_inward; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_partner_inventory_receipts_supply_inward ON public.partner_inventory_receipts USING btree (supply_inward_id);
-
-
---
 -- Name: idx_partner_invoice_items_invoice; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2311,20 +2275,6 @@ CREATE INDEX idx_partner_suppliers_firm_status ON public.partner_suppliers USING
 --
 
 CREATE INDEX idx_partner_suppliers_name ON public.partner_suppliers USING btree (firm_id, lower(supplier_name));
-
-
---
--- Name: idx_partner_supply_inwards_firm_received; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_partner_supply_inwards_firm_received ON public.partner_supply_inwards USING btree (firm_id, received_at DESC, created_at DESC);
-
-
---
--- Name: idx_partner_supply_inwards_supplier_received; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_partner_supply_inwards_supplier_received ON public.partner_supply_inwards USING btree (firm_id, supplier_id, received_at DESC, created_at DESC);
 
 
 --
@@ -2658,14 +2608,6 @@ ALTER TABLE ONLY public.partner_goods_receipts
 
 ALTER TABLE ONLY public.partner_goods_receipts
     ADD CONSTRAINT fk_partner_goods_receipts_supplier FOREIGN KEY (firm_id, supplier_id) REFERENCES public.partner_suppliers(firm_id, id) ON DELETE RESTRICT;
-
-
---
--- Name: partner_inventory_receipts fk_partner_inventory_receipts_supply_inward; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.partner_inventory_receipts
-    ADD CONSTRAINT fk_partner_inventory_receipts_supply_inward FOREIGN KEY (supply_inward_id) REFERENCES public.partner_supply_inwards(id) ON DELETE CASCADE;
 
 
 --
@@ -3498,38 +3440,6 @@ ALTER TABLE ONLY public.partner_supplier_payments
 
 ALTER TABLE ONLY public.partner_suppliers
     ADD CONSTRAINT partner_suppliers_firm_id_fkey FOREIGN KEY (firm_id) REFERENCES public.partner_firms(id) ON DELETE CASCADE;
-
-
---
--- Name: partner_supply_inwards partner_supply_inwards_brand_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.partner_supply_inwards
-    ADD CONSTRAINT partner_supply_inwards_brand_id_fkey FOREIGN KEY (brand_id) REFERENCES public.partner_brands(id) ON DELETE CASCADE;
-
-
---
--- Name: partner_supply_inwards partner_supply_inwards_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.partner_supply_inwards
-    ADD CONSTRAINT partner_supply_inwards_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
-
-
---
--- Name: partner_supply_inwards partner_supply_inwards_firm_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.partner_supply_inwards
-    ADD CONSTRAINT partner_supply_inwards_firm_id_fkey FOREIGN KEY (firm_id) REFERENCES public.partner_firms(id) ON DELETE CASCADE;
-
-
---
--- Name: partner_supply_inwards partner_supply_inwards_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.partner_supply_inwards
-    ADD CONSTRAINT partner_supply_inwards_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.partner_suppliers(id) ON DELETE RESTRICT;
 
 
 --

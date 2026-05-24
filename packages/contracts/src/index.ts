@@ -476,7 +476,7 @@ export const PartnerPurchaseSchema = z.object({
   supplierName: z.string().min(1),
   supplierInvoiceNumber: z.string().optional().or(z.literal("")),
   purchaseDate: z.string().min(1),
-  status: z.enum(["PLACED", "COMPLETED", "CANCELLED"]),
+  status: z.enum(["DRAFT", "PLACED", "COMPLETED", "CANCELLED"]),
   createdAt: z.string().optional().or(z.literal("")),
   createdByName: z.string().optional().or(z.literal("")),
   orderedAt: z.string().optional().or(z.literal("")),

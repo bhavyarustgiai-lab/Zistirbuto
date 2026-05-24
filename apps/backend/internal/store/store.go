@@ -408,9 +408,6 @@ type PartnerInventoryHistoryEntry struct {
 	SupplierName  string                        `json:"supplierName,omitempty"`
 	Note          string                        `json:"note,omitempty"`
 	Status        string                        `json:"status,omitempty"`
-	CanRevert     bool                          `json:"canRevert,omitempty"`
-	RevertedAt    string                        `json:"revertedAt,omitempty"`
-	RevertReason  string                        `json:"revertReason,omitempty"`
 	EventAt       string                        `json:"eventAt"`
 	Items         []PartnerInventoryHistoryLine `json:"items,omitempty"`
 }
@@ -10229,22 +10226,7 @@ func (s *Store) UpdatePartnerInventoryItem(firmID, itemID string, input UpdatePa
 func (s *Store) GetPartnerInventoryHistory(firmID string, filters PartnerInventoryHistoryFilters) ([]PartnerInventoryHistoryEntry, error) {
 	ctx := context.Background()
 	rows, err := s.pool.Query(ctx, `
-		with supply_inward_line_totals as (
-			select
-				r.supply_inward_id,
-				r.item_id,
-				i.catalog_item_id,
-				c.name as item_name,
-				c.sku,
-				sum(r.quantity)::int as quantity
-			from partner_inventory_receipts r
-			join partner_firm_inventory_items i on i.firm_id = r.firm_id and i.item_id = r.item_id
-			join partner_product_catalog c on c.id = i.catalog_item_id
-			where r.firm_id = $1::bigint
-			  and r.supply_inward_id is not null
-			group by r.supply_inward_id, r.item_id, i.catalog_item_id, c.name, c.sku
-		),
-		grn_line_totals as (
+		with grn_line_totals as (
 			select
 				g.id as grn_id,
 				g.firm_id,
@@ -10287,8 +10269,6 @@ func (s *Store) GetPartnerInventoryHistory(firmID string, filters PartnerInvento
 				lt.supplier_name,
 				trim(both ' ' from lt.grn_number || ' · ' || lt.purchase_number || coalesce(' · ' || nullif(lt.notes, ''), '')) as note,
 				'POSTED'::text as status,
-				''::text as reverted_at,
-				''::text as revert_reason,
 				lt.received_date::timestamptz as event_time,
 				jsonb_agg(
 					jsonb_build_object(
@@ -10300,7 +10280,6 @@ func (s *Store) GetPartnerInventoryHistory(firmID string, filters PartnerInvento
 					)
 					order by lt.item_name asc, lt.sku asc
 				) as items_json,
-				false as can_revert,
 				lower(
 					coalesce(lt.supplier_name, '') || ' ' ||
 					coalesce(lt.grn_number, '') || ' ' ||
@@ -10310,52 +10289,6 @@ func (s *Store) GetPartnerInventoryHistory(firmID string, filters PartnerInvento
 				) as search_text
 			from grn_line_totals lt
 			group by lt.grn_id, lt.firm_id, lt.brand_id, lt.supplier_id, lt.supplier_name, lt.grn_number, lt.purchase_number, lt.notes, lt.received_date
-		),
-		supply_inward_rows as (
-			select
-				si.id,
-				si.firm_id,
-				si.brand_id,
-				''::text as item_id,
-				''::text as catalog_item_id,
-				''::text as item_name,
-				''::text as sku,
-				'SUPPLY_INWARD'::text as event_type,
-				coalesce(sum(lt.quantity), 0)::int as quantity_delta,
-				0::int as quantity_from,
-				0::int as quantity_to,
-				si.supplier_id,
-				s.supplier_name,
-				coalesce(si.note, '') as note,
-				si.status,
-				coalesce(to_char(si.reverted_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), '') as reverted_at,
-				coalesce(si.revert_reason, '') as revert_reason,
-				si.created_at as event_time,
-				jsonb_agg(
-					jsonb_build_object(
-						'itemId', lt.item_id,
-						'catalogItemId', lt.catalog_item_id,
-						'itemName', lt.item_name,
-						'sku', lt.sku,
-						'quantity', lt.quantity
-					)
-					order by lt.item_name asc, lt.sku asc
-				) as items_json,
-				case
-					when si.status <> 'POSTED' then false
-					else bool_and(fi.quantity >= lt.quantity)
-				end as can_revert,
-				lower(
-					coalesce(s.supplier_name, '') || ' ' ||
-					coalesce(si.note, '') || ' ' ||
-					coalesce(string_agg(lt.item_name || ' ' || lt.sku, ' ' order by lt.item_name asc, lt.sku asc), '')
-				) as search_text
-			from partner_supply_inwards si
-			join partner_suppliers s on s.firm_id = si.firm_id and s.id = si.supplier_id
-			join supply_inward_line_totals lt on lt.supply_inward_id = si.id
-			join partner_firm_inventory_items fi on fi.firm_id = si.firm_id and fi.item_id = lt.item_id
-			where si.firm_id = $1::bigint
-			group by si.id, si.firm_id, si.brand_id, si.supplier_id, s.supplier_name, si.note, si.status, si.reverted_at, si.revert_reason, si.received_at
 		),
 		adjustment_rows as (
 			select
@@ -10374,11 +10307,8 @@ func (s *Store) GetPartnerInventoryHistory(firmID string, filters PartnerInvento
 				''::text as supplier_name,
 				coalesce(a.note, '') as note,
 				''::text as status,
-				''::text as reverted_at,
-				''::text as revert_reason,
 				a.created_at as event_time,
 				'[]'::jsonb as items_json,
-				false as can_revert,
 				lower(coalesce(c.name, '') || ' ' || coalesce(c.sku, '') || ' ' || coalesce(a.note, '')) as search_text
 			from partner_inventory_adjustments a
 			join partner_firm_inventory_items i on i.firm_id = a.firm_id and i.item_id = a.item_id
@@ -10387,8 +10317,6 @@ func (s *Store) GetPartnerInventoryHistory(firmID string, filters PartnerInvento
 		),
 		history as (
 			select * from grn_rows
-			union all
-			select * from supply_inward_rows
 			union all
 			select * from adjustment_rows
 		)
@@ -10408,9 +10336,6 @@ func (s *Store) GetPartnerInventoryHistory(firmID string, filters PartnerInvento
 			coalesce(supplier_name, ''),
 			note,
 			coalesce(status, ''),
-			can_revert,
-			reverted_at,
-			revert_reason,
 			to_char(event_time at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 			items_json::text
 		from history
@@ -10445,9 +10370,6 @@ func (s *Store) GetPartnerInventoryHistory(firmID string, filters PartnerInvento
 			&item.SupplierName,
 			&item.Note,
 			&item.Status,
-			&item.CanRevert,
-			&item.RevertedAt,
-			&item.RevertReason,
 			&item.EventAt,
 			&itemsJSON,
 		); err != nil {
@@ -10467,124 +10389,6 @@ func (s *Store) GetPartnerInventoryHistory(firmID string, filters PartnerInvento
 		return []PartnerInventoryHistoryEntry{}, nil
 	}
 	return items, nil
-}
-
-func (s *Store) RevertPartnerSupplyInward(firmID, supplyInwardID, reason string) (PartnerInventoryHistoryEntry, error) {
-	ctx := context.Background()
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return PartnerInventoryHistoryEntry{}, err
-	}
-	defer tx.Rollback(ctx)
-
-	var currentStatus string
-	if err := tx.QueryRow(ctx, `
-		select status
-		from partner_supply_inwards
-		where firm_id = $1::bigint and id = $2
-	`, firmID, supplyInwardID).Scan(&currentStatus); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return PartnerInventoryHistoryEntry{}, fmt.Errorf("supply inward not found")
-		}
-		return PartnerInventoryHistoryEntry{}, err
-	}
-	if currentStatus != "POSTED" {
-		return PartnerInventoryHistoryEntry{}, fmt.Errorf("supply inward is already reverted")
-	}
-
-	type lineCheck struct {
-		ItemID          string
-		RevertQuantity  int
-		CurrentQuantity int
-	}
-	rows, err := tx.Query(ctx, `
-		select
-			r.item_id,
-			sum(r.quantity)::int as revert_quantity,
-			i.quantity as current_quantity
-		from partner_inventory_receipts r
-		join partner_firm_inventory_items i on i.firm_id = r.firm_id and i.item_id = r.item_id
-		where r.firm_id = $1::bigint and r.supply_inward_id = $2
-		group by r.item_id, i.quantity
-	`, firmID, supplyInwardID)
-	if err != nil {
-		return PartnerInventoryHistoryEntry{}, err
-	}
-	defer rows.Close()
-
-	var checks []lineCheck
-	for rows.Next() {
-		var item lineCheck
-		if err := rows.Scan(&item.ItemID, &item.RevertQuantity, &item.CurrentQuantity); err != nil {
-			return PartnerInventoryHistoryEntry{}, err
-		}
-		if item.CurrentQuantity-item.RevertQuantity < 0 {
-			return PartnerInventoryHistoryEntry{}, fmt.Errorf("cannot revert supply inward because one or more items would become negative")
-		}
-		checks = append(checks, item)
-	}
-	if rows.Err() != nil {
-		return PartnerInventoryHistoryEntry{}, rows.Err()
-	}
-	if len(checks) == 0 {
-		return PartnerInventoryHistoryEntry{}, fmt.Errorf("supply inward has no lines")
-	}
-
-	now := time.Now().UTC()
-	revertReason := strings.TrimSpace(reason)
-
-	for _, item := range checks {
-		if _, err := tx.Exec(ctx, `
-			update partner_firm_inventory_items
-			set quantity = quantity - $3,
-			    updated_at = now()
-			where firm_id = $1::bigint and item_id = $2
-		`, firmID, item.ItemID, item.RevertQuantity); err != nil {
-			return PartnerInventoryHistoryEntry{}, err
-		}
-		if _, err := tx.Exec(ctx, `
-			insert into partner_stock_entries (
-				id, firm_id, item_id, quantity_delta, reason_type, reference_type, reference_id, note, created_by, created_at
-			) values ($1, $2, $3, $4, 'CANCEL', 'SUPPLY_INWARD', $5, nullif($6, ''), $7, $8)
-		`, nextID("pstock"), firmID, item.ItemID, -item.RevertQuantity, supplyInwardID, revertReason, s.currentUserID, now); err != nil {
-			return PartnerInventoryHistoryEntry{}, err
-		}
-	}
-
-	if _, err := tx.Exec(ctx, `
-		update partner_inventory_receipts
-		set status = 'VOIDED',
-		    voided_at = $3,
-		    void_reason = nullif($4, '')
-		where firm_id = $1::bigint and supply_inward_id = $2
-	`, firmID, supplyInwardID, now, revertReason); err != nil {
-		return PartnerInventoryHistoryEntry{}, err
-	}
-
-	if _, err := tx.Exec(ctx, `
-		update partner_supply_inwards
-		set status = 'REVERTED',
-		    reverted_at = $3,
-		    revert_reason = nullif($4, '')
-		where firm_id = $1::bigint and id = $2
-	`, firmID, supplyInwardID, now, revertReason); err != nil {
-		return PartnerInventoryHistoryEntry{}, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return PartnerInventoryHistoryEntry{}, err
-	}
-
-	items, err := s.GetPartnerInventoryHistory(firmID, PartnerInventoryHistoryFilters{})
-	if err != nil {
-		return PartnerInventoryHistoryEntry{}, err
-	}
-	for _, item := range items {
-		if item.ID == supplyInwardID && item.EventType == "SUPPLY_INWARD" {
-			return item, nil
-		}
-	}
-	return PartnerInventoryHistoryEntry{}, fmt.Errorf("supply inward not found after revert")
 }
 
 func (s *Store) CreateEntity(input CreateEntityInput) (Client, error) {

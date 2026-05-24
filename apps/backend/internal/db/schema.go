@@ -44,6 +44,20 @@ func ApplySchema(ctx context.Context, pool *pgxpool.Pool) error {
 
 func applySchemaCleanups(ctx context.Context, pool *pgxpool.Pool) error {
 	_, err := pool.Exec(ctx, `
+		alter table if exists partner_inventory_receipts
+			drop constraint if exists fk_partner_inventory_receipts_supply_inward,
+			drop column if exists supply_inward_id,
+			alter column status set default 'POSTED';
+
+		drop index if exists idx_partner_inventory_receipts_supply_inward;
+		drop index if exists idx_partner_supply_inwards_firm_received;
+		drop index if exists idx_partner_supply_inwards_supplier_received;
+		drop table if exists partner_supply_inwards;
+	`)
+	if err != nil {
+		return fmt.Errorf("drop legacy supply inward schema: %w", err)
+	}
+	_, err = pool.Exec(ctx, `
 		alter table if exists partner_product_catalog
 			drop constraint if exists chk_partner_product_catalog_default_pricing,
 			drop column if exists default_mrp,
